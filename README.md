@@ -1,6 +1,12 @@
 # Research Group A
 Welcome to the git repository of our Research Lab Course Experiment Pre-Testing
 
+# Data Analysis
+
+Data analysis files for the resulting data from the experiment can be found in the **data_analysis** directory.
+
+# Experiment setup
+
 ## Initial Setup
 
 ### 1. Open Terminal
