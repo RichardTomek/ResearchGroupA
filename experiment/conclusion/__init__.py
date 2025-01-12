@@ -25,6 +25,11 @@ class Group(BaseGroup):
 
 class Player(BasePlayer):
     pass
+    # def calculate_chocolates(self):
+    #   real_amount = self.participant.payoff_plus_participation_fee().to_real_world_currency(self.session)
+    #   bonus_payment = real_amount - 6
+    #   bonus_chocolates = math.ceil(bonus_payment / 2)
+    #   return max(0, bonus_chocolates) + 3  # Add 3 attendance chocolates
 
 
 # EXTRA DATABASE MODELS
@@ -57,6 +62,7 @@ class Results(Page):
         record_final_score(player, time.time())
         return dict(
             total_payout=player.participant.payoff_plus_participation_fee()
+            # total_chocolates=player.calculate_chocolates()
         )
 
 
