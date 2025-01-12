@@ -1,0 +1,767 @@
+## Load Packages
+Load & Auto-install missing packages
+
+```{r include=FALSE}
+# source("helper-scripts/helper.R")
+
+# Define your packages in a vector
+required_packages <- c("here", "tidyverse", "ggplot2", "dtwclust", "TSclust", "cluster", "parallel", "doSNOW", "mclust")
+
+
+# Call the function with your package vector
+load_packages(required_packages)
+```
+
+## Load data
+Define which csv file should be loaded for which task. From here on, df with the names `ball_task`, `math_task`, `video_one`, `video_two` are available which have the corresponding HR data. Only specify the file name + .csv ending - the code assumes the files are in a dir called `data` which should be located "next" to this notebook.
+
+```{r}
+file_mapping <- c(
+  "ball_task_lab_run_18_12.csv" = "ball_task",
+  "math_task_lab_run_18_12.csv" = "math_task",
+  "video_one_lab_run_18_12.csv" = "video_one",
+  "video_two_lab_run_18_12.csv" = "video_two"
+)
+
+# Read all files and assign them to the workspace with desired names
+walk2(
+  names(file_mapping),
+  file_mapping,
+  ~assign(
+    .y,
+    read_csv(here("data", .x)),
+    envir = .GlobalEnv
+  )
+)
+
+# Clean up environment (keeping only the data frames and helper functions)
+# rm(list = setdiff(ls(), c(file_mapping, "helper")))
+```
+
+## Preprocess data
+Here we:
+- create a unique id (session_label) for each participant because lable or session on their own may not be unique
+- normalize the data using z-score normalization
+- introduce `time_elapsed` which are the seconds since the start of the task for each HR reading for each participant (for each round). 
+
+Todo: 
+- We are right now not extracting / using the RR intervals
+- There is something a little weird with Mako in the ball task round one - where the first reading is already at "second two". `min(time_recorded)` returns a time 2 seconds before the actual min reading for this participant for some reason.
+
+```{r}
+video_one <- video_one %>%
+  mutate(session_label = paste(session_code, label, sep = "_")) %>%
+  group_by(session_label) %>%
+  mutate(heart_rate_z = (heart_rate - mean(heart_rate, na.rm = TRUE)) / sd(heart_rate, na.rm = TRUE)) %>%
+  mutate(
+    time_recorded = ymd_hms(time_recorded),
+    # Calculate time elapsed in minutes from first recording of each session
+    time_elapsed = as.numeric(
+      difftime(time_recorded, 
+              min(time_recorded),
+              units = "sec")
+    )
+  ) %>%
+  ungroup()
+
+video_two <- video_two %>%
+  mutate(session_label = paste(session_code, label, sep = "_")) %>%
+  group_by(session_label) %>%
+  mutate(heart_rate_z = (heart_rate - mean(heart_rate, na.rm = TRUE)) / sd(heart_rate, na.rm = TRUE)) %>%
+  mutate(
+    time_recorded = ymd_hms(time_recorded),
+    # Calculate time elapsed in minutes from first recording of each session
+    time_elapsed = as.numeric(
+      difftime(time_recorded, 
+              min(time_recorded),
+              units = "sec")
+    )
+  ) %>%
+  ungroup()
+
+ball_task <- ball_task %>%
+  mutate(session_label = paste(session_code, label, sep = "_")) %>%
+  group_by(session_label, round_number) %>%
+  mutate(heart_rate_z = (heart_rate - mean(heart_rate, na.rm = TRUE)) / sd(heart_rate, na.rm = TRUE)) %>%
+  mutate(
+    time_recorded = ymd_hms(time_recorded),
+    # Calculate time elapsed in minutes from first recording of each session
+    time_elapsed = as.numeric(
+      difftime(time_recorded, 
+              min(time_recorded),
+              units = "sec")
+    )
+  ) %>%
+  ungroup()
+
+math_task <- math_task %>%
+  mutate(session_label = paste(session_code, label, sep = "_")) %>%
+  group_by(session_label, round_number) %>%
+  mutate(heart_rate_z = (heart_rate - mean(heart_rate, na.rm = TRUE)) / sd(heart_rate, na.rm = TRUE)) %>%
+  mutate(
+    time_recorded = ymd_hms(time_recorded),
+    # Calculate time elapsed in minutes from first recording of each session
+    time_elapsed = as.numeric(
+      difftime(time_recorded, 
+              min(time_recorded),
+              units = "sec")
+    )
+  ) %>%
+  ungroup()
+
+```
+
+## Initial Plots
+
+```{r, fig.width=10, fig.height=7, dpi=300}
+
+# Normalized HR during video one
+plot_heart_rate(
+  data = video_one,
+  x = "time_elapsed",
+  y = "heart_rate_z",
+  group = "session_label",
+  title = "Heart Rate Over Time by Participant (Video One)",
+  subtitle = "Original Data\nBlack line shows overall trend",
+  x_label = "Time Elapsed (minutes)",
+  y_label = "Heart Rate (bpm)",
+  legend_title = "Session"
+)
+
+# Normalized HR during video two
+plot_heart_rate(
+  data = video_two,
+  x = "time_elapsed",
+  y = "heart_rate_z",
+  group = "session_label",
+  title = "Heart Rate Over Time by Participant (Video Two)",
+  subtitle = "Original Data\nBlack line shows overall trend",
+  x_label = "Time Elapsed (minutes)",
+  y_label = "Heart Rate (bpm)",
+  legend_title = "Session"
+)
+
+# Overall trend over all rounds for the math task
+
+# Prepare the data with time buckets
+math_task_trends <- math_task %>%
+  # Create 1-second time buckets
+  mutate(
+    time_bucket = floor(time_elapsed)
+  ) %>%
+  # Group by round and time buckets
+  group_by(round_number, time_bucket) %>%
+  # Calculate mean heart rate for each time bucket in each round
+  summarise(
+    heart_rate_z = mean(heart_rate_z, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  # Create a unique identifier for each round for the plotting function
+  mutate(
+    session_label = paste("Round", round_number),
+    # Use the time bucket as our time_elapsed for plotting
+    time_elapsed = time_bucket
+  )
+
+# Use your existing plotting function
+plot_heart_rate(
+  data = math_task_trends,
+  x = "time_elapsed",
+  y = "heart_rate_z",
+  group = "session_label",
+  title = "Average Heart Rate Trends Across All Rounds",
+  subtitle = "Each line represents the average trend for a round\nBlack line shows overall trend across rounds",
+  x_label = "Time Elapsed (seconds)",
+  y_label = "Average Standardized Heart Rate (z-score)",
+  legend_title = "Round"
+)
+
+# Prepare the data with time buckets
+ball_task_trends <- ball_task %>%
+  # Create 1-second time buckets
+  mutate(
+    time_bucket = floor(time_elapsed)
+  ) %>%
+  # Group by round and time buckets
+  group_by(round_number, time_bucket) %>%
+  # Calculate mean heart rate for each time bucket in each round
+  summarise(
+    heart_rate_z = mean(heart_rate_z, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  # Create a unique identifier for each round for the plotting function
+  mutate(
+    session_label = paste("Round", round_number),
+    # Use the time bucket as our time_elapsed for plotting
+    time_elapsed = time_bucket
+  )
+
+# Use your existing plotting function
+plot_heart_rate(
+  data = ball_task_trends,
+  x = "time_elapsed",
+  y = "heart_rate_z",
+  group = "session_label",
+  title = "Average Heart Rate Trends Across All Rounds",
+  subtitle = "Each line represents the average trend for a round\nBlack line shows overall trend across rounds",
+  x_label = "Time Elapsed (seconds)",
+  y_label = "Average Standardized Heart Rate (z-score)",
+  legend_title = "Round"
+)
+
+rm(list = c("ball_task_trends", "math_task_trends"))
+
+```
+
+There seems to be an issue with the round duration! All rounds should be 60s in length! We assume this to be an issue with frisbee or our SQL pre-processing querries. We narrowed it down to readings being incorrectly assigned to the following round even doe they should still be part of the previous round. Lets try re-calculating the round number based on the time gaps between readings. If we see a gap larger than 10s we assume that the readings are from different rounds, if we see gaps of less than 10s we assume the readings to be part of the same round. 
+
+```{r}
+# This first calculates the correct round number and then re-calculates the normalized HR and elapsed time based on the new round numbers
+ball_task <- ball_task %>%
+  # First ensure data is ordered chronologically within each participant
+  arrange(session_label, time_recorded) %>%
+  group_by(session_label) %>%
+  mutate(
+    # Calculate time difference between consecutive readings
+    time_diff = as.numeric(difftime(
+      time_recorded, 
+      lag(time_recorded, default = first(time_recorded)),
+      units = "secs"
+    )),
+    # Create new round numbers based on gaps > 10s
+    round_number = cumsum(time_diff > 10 | row_number() == 1)
+  ) %>%
+  # Now recalculate z-scores and time_elapsed based on new rounds
+  group_by(session_label, round_number) %>%
+  mutate(
+    heart_rate_z = (heart_rate - mean(heart_rate, na.rm = TRUE)) / sd(heart_rate, na.rm = TRUE),
+    time_elapsed = as.numeric(
+      difftime(time_recorded, 
+              min(time_recorded),
+              units = "sec")
+    )
+  ) %>%
+  ungroup()
+
+# Prepare the data with time buckets
+ball_task_trends <- ball_task %>%
+  # Create 1-second time buckets
+  mutate(
+    time_bucket = floor(time_elapsed)
+  ) %>%
+  # Group by round_number and time buckets
+  group_by(round_number, time_bucket) %>%
+  # Calculate mean heart rate for each time bucket in each round
+  summarise(
+    heart_rate_z = mean(heart_rate_z, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  # Create a unique identifier for each round for the plotting function
+  mutate(
+    session_label = paste("Round", round_number),
+    # Use the time bucket as our time_elapsed for plotting
+    time_elapsed = time_bucket
+  )
+
+# Use your existing plotting function
+plot_heart_rate(
+  data = ball_task_trends,
+  x = "time_elapsed",
+  y = "heart_rate_z",
+  group = "session_label",
+  title = "Average Heart Rate Trends Across All Rounds (Ball Task)",
+  subtitle = "Each line represents the average trend for a round\nBlack line shows overall trend across rounds",
+  x_label = "Time Elapsed (seconds)",
+  y_label = "Average Standardized Heart Rate (z-score)",
+  legend_title = "Round"
+)
+
+
+math_task <- math_task %>%
+  # First ensure data is ordered chronologically within each participant
+  arrange(session_label, time_recorded) %>%
+  group_by(session_label) %>%
+  mutate(
+    # Calculate time difference between consecutive readings
+    time_diff = as.numeric(difftime(
+      time_recorded, 
+      lag(time_recorded, default = first(time_recorded)),
+      units = "secs"
+    )),
+    # Create new round numbers based on gaps > 10s
+    round_number = cumsum(time_diff > 10 | row_number() == 1)
+  ) %>%
+  # Now recalculate z-scores and time_elapsed based on new rounds
+  group_by(session_label, round_number) %>%
+  mutate(
+    heart_rate_z = (heart_rate - mean(heart_rate, na.rm = TRUE)) / sd(heart_rate, na.rm = TRUE),
+    time_elapsed = as.numeric(
+      difftime(time_recorded, 
+              min(time_recorded),
+              units = "sec")
+    )
+  ) %>%
+  ungroup()
+
+# Prepare the data with time buckets
+math_task_trends <- math_task %>%
+  # Create 1-second time buckets
+  mutate(
+    time_bucket = floor(time_elapsed)
+  ) %>%
+  # Group by round_number and time buckets
+  group_by(round_number, time_bucket) %>%
+  # Calculate mean heart rate for each time bucket in each round
+  summarise(
+    heart_rate_z = mean(heart_rate_z, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  # Create a unique identifier for each round for the plotting function
+  mutate(
+    session_label = paste("Round", round_number),
+    # Use the time bucket as our time_elapsed for plotting
+    time_elapsed = time_bucket
+  )
+
+# Use your existing plotting function
+plot_heart_rate(
+  data = math_task_trends,
+  x = "time_elapsed",
+  y = "heart_rate_z",
+  group = "session_label",
+  title = "Average Heart Rate Trends Across All Rounds (Math Task)",
+  subtitle = "Each line represents the average trend for a round\nBlack line shows overall trend across rounds",
+  x_label = "Time Elapsed (seconds)",
+  y_label = "Average Standardized Heart Rate (z-score)",
+  legend_title = "Round"
+)
+
+```
+Now it seems like all of our rounds are correctly calculated to be 60s long. 
+
+## Time-Series Clustering!
+
+```{r}
+# Modified data preparation function
+prepare_ts_data <- function(ball_task, math_task) {
+  combined_data <- bind_rows(
+    ball_task %>% mutate(task = "ball"),
+    math_task %>% mutate(task = "math")
+  )
+  
+  ts_list <- combined_data %>%
+    group_by(session_label, round_number, task) %>%
+    arrange(time_elapsed) %>%
+    summarise(
+      ts = list(as.numeric(heart_rate_z)),  # Explicitly convert to numeric
+      .groups = "drop"
+    )
+  
+  # Convert to a list of numeric vectors
+  ts_data <- ts_list$ts
+  names(ts_data) <- paste(ts_list$session_label, ts_list$round_number, ts_list$task)
+  
+  # Verify data is numeric
+  if(!all(sapply(ts_data, is.numeric))) {
+    stop("Not all time series are numeric")
+  }
+  
+  # Store metadata
+  attr(ts_data, "metadata") <- ts_list %>% select(-ts)
+  
+  return(ts_data)
+}
+
+ts_cluster_data <- prepare_ts_data(ball_task, math_task)
+
+```
+
+We have (very slightly) different length time series here, thus we cannot use fuzzy clustering. We will investigate some other types and try out different distance measures / centroids
+
+
+
+```{r}
+# Modified grid search function with ground truth validation
+grid_search_clustering <- function(data, 
+                                 k_range = 2:4,
+                                 methods = c("partitional", "hierarchical"),
+                                 distances = c("dtw", "dtw2", "sbd", "gak", "lbk", "sdtw"),
+                                 centroids = list(
+                                   partitional = c("pam", "dba", "shape", "fcmdd", "sdtw_cent")
+                                   # hierarchical = c("pam")
+                                 ),
+                                 cores = detectCores()) {
+  
+  # Extract ground truth labels from the data names
+  true_labels <- sapply(strsplit(names(data), " "), function(x) x[3])  # Get the task type
+  
+  # Create combinations for each method separately and then combine them
+  combinations_list <- list()
+  
+  for (method in methods) {
+      # Create grid for current method with its specific centroids
+      method_grid <- expand.grid(
+          method = method,
+          distance = distances,
+          k = k_range,
+          centroid = centroids[[method]],
+          stringsAsFactors = FALSE
+      )
+      combinations_list[[method]] <- method_grid
+  }
+  
+  # Combine all method-specific grids
+  combinations <- do.call(rbind, combinations_list)
+  
+  # Set up parallel processing
+  if(cores > 1) {
+    cluster <- makeCluster(cores)
+    registerDoSNOW(cluster)
+    on.exit(stopCluster(cluster))
+    
+  }
+  
+  # Set up progress bar
+  total_combinations <- nrow(combinations)
+  pb <- txtProgressBar(min = 0, max = total_combinations, style = 3)
+  progress <- function(n) setTxtProgressBar(pb, n)
+  
+  # Parallel processing of combinations
+  results_list <- foreach(i = 1:nrow(combinations), 
+                         .packages = c("dtwclust", "dplyr", "mclust"),  # Added mclust for ARI
+                         .errorhandling = "pass",
+                         .options.snow = list(progress = progress)) %dopar% {
+    
+    method <- combinations$method[i]
+    dist <- combinations$distance[i]
+    cent <- combinations$centroid[i]
+    k <- combinations$k[i]
+    
+    tryCatch({
+      # Clustering based on method
+      if(method == "partitional") {
+        cluster_obj <- tsclust(data,
+                             type = method,
+                             k = k,
+                             distance = dist,
+                             centroid = cent,
+                             control = partitional_control(nrep = 1),
+                             args = list(dist.params = list(window.size = 20)),
+                             seed = 123)
+      } else if(method == "hierarchical") {
+        cluster_obj <- tsclust(data,
+                             type = method,
+                             k = k,
+                             distance = dist,
+                             centroid = cent,
+                             control = hierarchical_control(),
+                             args = list(dist.params = list(window.size = 20)),
+                             seed = 123)
+      } else if(method == "fuzzy") {
+        cluster_obj <- tsclust(data,
+                             type = method,
+                             k = k,
+                             distance = dist,
+                             centroid = cent,
+                             control = fuzzy_control(fuzziness = 2),
+                             args = list(dist.params = list(window.size = 20)),
+                             seed = 123)
+      }
+      
+      # Get cluster assignments
+      cluster_labels <- cluster_obj@cluster
+      
+      # Calculate validation indices
+      sil <- tryCatch(cvi(cluster_obj, type = "Sil"), error = function(e) NA)
+      db <- tryCatch(cvi(cluster_obj, type = "DB"), error = function(e) NA)
+      ch <- tryCatch(cvi(cluster_obj, type = "CH"), error = function(e) NA)
+      
+      # Calculate Adjusted Rand Index
+      ari <- adjustedRandIndex(cluster_labels, as.factor(true_labels))
+      
+      # Calculate accuracy (after matching clusters to tasks)
+      # This requires finding the best mapping between cluster numbers and tasks
+      unique_clusters <- unique(cluster_labels)
+      unique_tasks <- unique(true_labels)
+      
+      # Try both possible mappings (for k=2) and take the better one
+      if(k == 2) {
+        accuracy1 <- mean(cluster_labels == as.numeric(factor(true_labels)))
+        accuracy2 <- mean(cluster_labels == (3 - as.numeric(factor(true_labels))))
+        accuracy <- max(accuracy1, accuracy2)
+      } else {
+        # For k != 2, just use basic accuracy
+        accuracy <- mean(cluster_labels == as.numeric(factor(true_labels)))
+      }
+      
+      # Return results
+      list(
+        result = data.frame(
+          method = method,
+          distance = dist,
+          centroid = cent,
+          k = k,
+          silhouette = sil,
+          davies_bouldin = db,
+          calinski_harabasz = ch,
+          adjusted_rand_index = ari,
+          accuracy = accuracy,
+          error = FALSE,
+          error_message = NA_character_
+        ),
+        cluster_obj = cluster_obj
+      )
+      
+    }, error = function(e) {
+      list(
+        result = data.frame(
+          method = method,
+          distance = dist,
+          centroid = cent,
+          k = k,
+          silhouette = NA_real_,
+          davies_bouldin = NA_real_,
+          calinski_harabasz = NA_real_,
+          adjusted_rand_index = NA_real_,
+          accuracy = NA_real_,
+          error = TRUE,
+          error_message = conditionMessage(e)
+        ),
+        cluster_obj = NULL
+      )
+    })
+  }
+  
+  # Process results
+  results_df <- do.call(rbind, lapply(results_list, function(x) x$result))
+  successful_results <- results_df[!results_df$error, ]
+  failed_results <- results_df[results_df$error, ]
+  
+  # Store clustering objects
+  all_results <- list()
+  for(i in seq_along(results_list)) {
+    if(!is.null(results_list[[i]]$cluster_obj)) {
+      key <- with(results_list[[i]]$result,
+                 paste(method, distance, centroid, k, sep = "_"))
+      all_results[[key]] <- results_list[[i]]$cluster_obj
+    }
+  }
+  
+  close(pb)
+  
+  return(list(
+    summary = successful_results,
+    full_results = all_results,
+    failed_combinations = failed_results
+  ))
+}
+
+
+
+# Run the grid search
+results <- grid_search_clustering(ts_cluster_data)
+
+```
+
+Best results based on metric
+
+```{r}
+
+analyze_clustering_results <- function(results) {
+    # Extract successful results
+    successful <- results$summary
+    
+    # Helper function to get top 3 for each metric (higher is better)
+    get_top3_higher <- function(df, metric) {
+        df_sorted <- df[order(df[[metric]], decreasing = TRUE), ]
+        head(df_sorted[, c("method", "distance", "centroid", "k", metric)], 3)
+    }
+    
+    # Helper function to get top 3 for each metric (lower is better)
+    get_top3_lower <- function(df, metric) {
+        df_sorted <- df[order(df[[metric]], decreasing = FALSE), ]
+        head(df_sorted[, c("method", "distance", "centroid", "k", metric)], 3)
+    }
+    
+    # Get top 3 for each metric
+    top_silhouette <- get_top3_higher(successful, "silhouette")
+    top_ch <- get_top3_higher(successful, "calinski_harabasz")
+    top_ari <- get_top3_higher(successful, "adjusted_rand_index")
+    top_accuracy <- get_top3_higher(successful, "accuracy")
+    top_db <- get_top3_lower(successful, "davies_bouldin")  # Lower is better for DB
+    
+    # For overall best, normalize each metric to 0-1 scale and combine
+    normalized <- successful
+    
+    # Function to min-max normalize
+    normalize <- function(x) (x - min(x, na.rm = TRUE)) / (diff(range(x, na.rm = TRUE)))
+    
+    # Normalize each metric
+    normalized$sil_norm <- normalize(normalized$silhouette)
+    normalized$ch_norm <- normalize(normalized$calinski_harabasz)
+    normalized$db_norm <- 1 - normalize(normalized$davies_bouldin)  # Invert DB since lower is better
+    normalized$ari_norm <- normalize(normalized$adjusted_rand_index)
+    normalized$acc_norm <- normalize(normalized$accuracy)
+    
+    # Calculate combined score (equal weights)
+    normalized$combined_score <- rowMeans(
+        cbind(normalized$sil_norm, 
+              normalized$ch_norm, 
+              normalized$db_norm,
+              normalized$ari_norm,
+              normalized$acc_norm), 
+        na.rm = TRUE
+    )
+    
+    # Get top 3 overall combinations
+    top_overall <- normalized[order(normalized$combined_score, decreasing = TRUE), ]
+    top_overall <- head(top_overall[, c("method", "distance", "centroid", "k", "combined_score")], 3)
+    
+    # Return all results
+    return(list(
+        top_silhouette = top_silhouette,
+        top_calinski_harabasz = top_ch,
+        top_davies_bouldin = top_db,
+        top_adjusted_rand = top_ari,
+        top_accuracy = top_accuracy,
+        top_overall = top_overall
+    ))
+}
+
+best_combinations <- analyze_clustering_results(results)
+
+# Print results
+print("Top 3 by Silhouette:")
+print(best_combinations$top_silhouette)
+
+print("\nTop 3 by Calinski-Harabasz:")
+print(best_combinations$top_calinski_harabasz)
+
+print("\nTop 3 by Davies-Bouldin:")
+print(best_combinations$top_davies_bouldin)
+
+print("\nTop 3 by Adjusted Rand Index:")
+print(best_combinations$top_adjusted_rand)
+
+print("\nTop 3 by Accuracy:")
+print(best_combinations$top_accuracy)
+
+print("\nTop 3 Overall:")
+print(best_combinations$top_overall)
+```
+
+Lets now investigate the top clustering a bit further
+
+```{r, fig.width=10, fig.height=7, dpi=300}
+registerDoSEQ()
+clustering <- tsclust(ts_cluster_data, type="p", distance="dtw", k=2, centroid="pam", args = list(dist.params = list(window.size = 20)))
+
+# Usage:
+plot_ts_clusters(ts_cluster_data, clustering, k = 2)
+
+```
+```{r, fig.width=7, fig.height=7, dpi=300}
+# Get the metadata including task labels
+metadata <- attr(ts_cluster_data, "metadata")
+
+# First part - confusion matrix and metrics
+conf_matrix <- table(
+  True = metadata$task,
+  Predicted = clustering@cluster
+)
+print("Confusion Matrix:")
+print(conf_matrix)
+
+# Calculate metrics
+metrics <- data.frame(
+  Task = c("ball", "math"),
+  Precision = numeric(2),
+  Recall = numeric(2),
+  F1_Score = numeric(2),
+  stringsAsFactors = FALSE
+)
+
+# Calculate metrics for each task
+for(i in 1:2) {
+  task <- metrics$Task[i]
+  TP <- conf_matrix[task, i]
+  FP <- sum(conf_matrix[, i]) - TP
+  FN <- sum(conf_matrix[task, ]) - TP
+  
+  metrics$Precision[i] <- TP / (TP + FP)
+  metrics$Recall[i] <- TP / (TP + FN)
+  metrics$F1_Score[i] <- 2 * (metrics$Precision[i] * metrics$Recall[i]) / 
+                         (metrics$Precision[i] + metrics$Recall[i])
+}
+
+# Print overall accuracy
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+cat("\nOverall Accuracy:", round(accuracy, 3))
+
+# Print rounded metrics
+print("\nPer-class metrics:")
+metrics_rounded <- metrics
+metrics_rounded[, 2:4] <- round(metrics_rounded[, 2:4], 3)
+print(metrics_rounded)
+
+# Create confusion matrix visualization
+library(ggplot2)
+
+# Convert confusion matrix to data frame for plotting
+conf_df <- as.data.frame(conf_matrix)
+names(conf_df) <- c("True", "Predicted", "Freq")
+
+ggplot(conf_df, aes(x = Predicted, y = True, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = Freq), color = "black", size = 5) +
+  scale_fill_gradient(low = "#FFFFFF", high = "#D73027") +
+  theme_minimal() +
+  labs(title = "Confusion Matrix Heatmap",
+       x = "Predicted Cluster",
+       y = "True Task") +
+  theme(text = element_text(size = 12),
+        axis.text = element_text(size = 10),
+        plot.title = element_text(size = 14, face = "bold"))
+
+
+
+
+```
+
+```{r}
+# Using reasonable HR cutoffs (40-200 bpm)
+ball_task$is_outlier <- ball_task$heart_rate < 40 | ball_task$heart_rate > 200
+math_task$is_outlier <- math_task$heart_rate < 40 | math_task$heart_rate > 200
+video_one$is_outlier <- video_one$heart_rate < 40 | video_one$heart_rate > 200
+video_two$is_outlier <- video_two$heart_rate < 40 | video_two$heart_rate > 200
+
+# Visualization
+ggplot(ball_task, aes(x = time_recorded, y = heart_rate)) +
+  geom_point(aes(color = is_outlier)) +
+  geom_hline(yintercept = c(40, 200), linetype = "dashed", color = "red") +
+  theme_minimal() +
+  labs(title = "Heart Rate Over Time",
+       subtitle = "Dashed lines show physiological cutoffs (40-200 bpm)")
+
+ggplot(math_task, aes(x = time_recorded, y = heart_rate)) +
+  geom_point(aes(color = is_outlier)) +
+  geom_hline(yintercept = c(40, 200), linetype = "dashed", color = "red") +
+  theme_minimal() +
+  labs(title = "Heart Rate Over Time",
+       subtitle = "Dashed lines show physiological cutoffs (40-200 bpm)")
+
+ggplot(video_one, aes(x = time_recorded, y = heart_rate)) +
+  geom_point(aes(color = is_outlier)) +
+  geom_hline(yintercept = c(40, 200), linetype = "dashed", color = "red") +
+  theme_minimal() +
+  labs(title = "Heart Rate Over Time",
+       subtitle = "Dashed lines show physiological cutoffs (40-200 bpm)")
+
+ggplot(video_two, aes(x = time_recorded, y = heart_rate)) +
+  geom_point(aes(color = is_outlier)) +
+  geom_hline(yintercept = c(40, 200), linetype = "dashed", color = "red") +
+  theme_minimal() +
+  labs(title = "Heart Rate Over Time",
+       subtitle = "Dashed lines show physiological cutoffs (40-200 bpm)")
+```
+

@@ -1,0 +1,99 @@
+```{r}
+source("helper-scripts/helper.R")
+
+# Define your packages in a vector
+required_packages <- c("here", "tidyverse", "ggplot2", "gridExtra", "reshape2")
+
+
+# Call the function with your package vector
+load_packages(required_packages)
+```
+
+```{r}
+# Box plot for shape clustering
+p1 <- ggplot(combined_data, aes(x=task, y=shape_cluster, fill=task)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title="Shape Clustering Distribution by Task",
+       x="Task", y="Shape Cluster") +
+  theme(legend.position="none")
+
+# Box plot for feature clustering
+p2 <- ggplot(combined_data, aes(x=task, y=feature_cluster, fill=task)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title="Feature Clustering Distribution by Task",
+       x="Task", y="Feature Cluster") +
+  theme(legend.position="none")
+
+grid.arrange(p1, p2, ncol=2)
+```
+```{r}
+# Create heatmap data for shape clustering
+shape_heatmap_data <- combined_data %>%
+  group_by(task, shape_cluster) %>%
+  summarise(count = n()) %>%
+  group_by(task) %>%
+  mutate(proportion = count/sum(count))
+
+# Create heatmap data for feature clustering
+feature_heatmap_data <- combined_data %>%
+  group_by(task, feature_cluster) %>%
+  summarise(count = n()) %>%
+  group_by(task) %>%
+  mutate(proportion = count/sum(count))
+
+# Plot heatmaps
+p3 <- ggplot(shape_heatmap_data, aes(x=factor(shape_cluster), y=task, fill=proportion)) +
+  geom_tile() +
+  scale_fill_gradient(low="white", high="steelblue") +
+  theme_minimal() +
+  labs(title="Shape Clustering Distribution",
+       x="Shape Cluster", y="Task", fill="Proportion")
+
+p4 <- ggplot(feature_heatmap_data, aes(x=factor(feature_cluster), y=task, fill=proportion)) +
+  geom_tile() +
+  scale_fill_gradient(low="white", high="steelblue") +
+  theme_minimal() +
+  labs(title="Feature Clustering Distribution",
+       x="Feature Cluster", y="Task", fill="Proportion")
+
+grid.arrange(p3, p4, ncol=2)
+```
+```{r}
+# Density plots for shape clustering
+p5 <- ggplot(combined_data, aes(x=shape_cluster, fill=task)) +
+  geom_density(alpha=0.5) +
+  theme_minimal() +
+  labs(title="Shape Clustering Density by Task",
+       x="Shape Cluster", y="Density")
+
+# Density plots for feature clustering
+p6 <- ggplot(combined_data, aes(x=feature_cluster, fill=task)) +
+  geom_density(alpha=0.5) +
+  theme_minimal() +
+  labs(title="Feature Clustering Density by Task",
+       x="Feature Cluster", y="Density")
+
+grid.arrange(p5, p6, ncol=2)
+```
+```{r}
+# Bar plots for shape clustering
+p7 <- ggplot(combined_data, aes(x=factor(shape_cluster), fill=task)) +
+  geom_bar(position="fill") +
+  theme_minimal() +
+  labs(title="Shape Clustering Distribution",
+       x="Shape Cluster", y="Proportion") +
+  scale_y_continuous(labels = scales::percent)
+
+# Bar plots for feature clustering
+p8 <- ggplot(combined_data, aes(x=factor(feature_cluster), fill=task)) +
+  geom_bar(position="fill") +
+  theme_minimal() +
+  labs(title="Feature Clustering Distribution",
+       x="Feature Cluster", y="Proportion") +
+  scale_y_continuous(labels = scales::percent)
+
+grid.arrange(p7, p8, ncol=2)
+```
+
