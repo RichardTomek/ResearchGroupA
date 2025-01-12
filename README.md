@@ -50,9 +50,6 @@ pip install otree
 cd frisbee-otree-extension-dev/
 pip install .
 cd ../
-
-# Install additional dependencies for BLE heart rate monitor
-pip install bleak questionary
 ```
 
 ## Running the Server
