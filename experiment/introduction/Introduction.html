@@ -1,0 +1,69 @@
+{{ block title }}
+    Welcome to the experiment!
+<div class="title-line"></div>
+{{ endblock }}
+
+{{ block content }}
+    <style>
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            text-align: left;
+        }
+        .content-box {
+            background-color: #fefefe;  /* Softer, slightly bluish background */
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px ;
+        }
+        .title-line {
+            border-bottom: 3px solid #e6f3ff;
+            margin: 20px 0;
+        }
+        .welcome-text {
+            margin: 30px 0;
+            line-height: 1.8;
+            font-size: 1.1em;
+        }
+        .highlight {
+            font-weight: bold;
+            color: #333;
+        }
+        .instruction-note {
+            margin: 25px 0;
+            color: #333;
+            font-weight: bold;
+        }
+    </style>
+
+    <div class="container">
+        <div class="content-box">
+
+            <div class="welcome-text">
+                Thank you for participating in this study!
+                <p>Please turn off your phone or store it in your bag.</p>
+                The experiment will begin shortly, and consists of a total of
+                <span class="highlight">five parts</span>:
+                <ul>
+                    <li><strong>Part 1</strong> - Measuring your baseline heart rate</li>
+                    <li><strong>Part 2</strong> - First Task</li>
+                    <li><strong>Part 3</strong> - Measuring your baseline heart rate</li>
+                    <li><strong>Part 4</strong> - Second Task</li>
+                    <li><strong>Part 5</strong> - Demographics</li>
+                </ul>
+                Each task will include a total of <strong>5 rounds</strong>.
+
+                You'll be guided through each part step by step.
+            </div>
+
+            <div class="title-line"></div>
+
+            <div class="instruction-note">
+                Please follow the instructions carefully!
+            </div>
+
+            {{ next_button }}
+        </div>
+    </div>
+{{ endblock }}

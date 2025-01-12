@@ -1,0 +1,62 @@
+{{ block title }}
+    <div id="title">Please wait for the video to load</div>
+{{ endblock }}
+{{ block content }}
+<style>
+    video {
+        max-width: 100%;
+        max-height: 100%;
+        display: block;
+    }
+</style>
+
+<div id="content" style="display: none">
+    <video id='relaxVideo' disablePictureInPicture>
+        <source src="{{ static 'global/video2small.mp4'}}" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+    <div style="margin-top: 10px; display: flex; align-items: center;">
+        <label for="volumeSlider">Volume:</label>
+        <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="0.5" style="width: 300px;">
+        <button id="playButton" class="otree-btn-next btn btn-primary" type="button" onclick="playVideo()">Play</button>
+        <button id="nextButton" style="display: none;">Next</button>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const video = document.getElementById('relaxVideo');
+        const nextButton = document.getElementById('nextButton');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const content = document.getElementById('content');
+        const title = document.getElementById('title')
+
+        video.addEventListener('canplay', function() {
+            title.innerHTML = "Play the video and try to relax :)"
+            content.style.display = 'block';
+        });
+
+        video.addEventListener('ended', function() {
+            nextButton.click();
+        });
+
+        volumeSlider.addEventListener('input', function() {
+            video.volume = this.value;
+        });
+    });
+
+    function playVideo() {
+        const video = document.getElementById('relaxVideo');
+        const playButton = document.getElementById('playButton');
+        console.log("it works")
+        video.play();
+        playButton.style.display = 'none';
+
+        liveSend({
+                'type': 'video_start'
+            });
+    }
+
+</script>
+
+{{ endblock }}

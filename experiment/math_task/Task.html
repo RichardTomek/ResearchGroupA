@@ -1,0 +1,81 @@
+{{ block title }}
+    Part 2 - Round {{ player.round_number }} of {{ C.NUM_ROUNDS }}
+<div class="title-line"></div>
+{{ endblock }}
+
+{{ block content }}
+<style>
+        .title-line {
+            border-bottom: 3px solid #e6f3ff;
+            margin: 20px 0;
+        }
+        .instruction-box {
+            background-color: #e8f4f8;  /* Light blue background */
+            padding: 12px;
+            margin: 20px 0;
+            border-radius: 4px;
+            color: #2d3436;
+        }
+
+    </style>
+    <div class="card">
+        <div class="card-body">
+            <div class="instruction-box">
+            Please sum the following four numbers together.
+            </div>
+            <div>
+                <span id='equation'>
+                </span>
+                <span>
+                    <input id="inputbox" type="number">
+                    <button class="otree-btn-next btn btn-primary" type="button" onclick="sendValue('submit')">Send</button>
+                </span>
+            </div>
+            <div id="errormsg" style="color: red; display: none;">
+                Please enter a valid integer!
+            </div>
+        </div>
+    </div>
+<script>
+
+    let equation_html = document.getElementById('equation');
+    let inputbox = document.getElementById('inputbox');
+    let error_msg = document.getElementById('errormsg')
+
+    window.onload = function() {
+        sendValue('get')
+    };
+
+    inputbox.addEventListener('input', () => {
+        let value = inputbox.value;
+        if (!/^-?\d+$/.test(value)) {
+            error_msg.style.display = "block";
+        } else {
+            error_msg.style.display = "none";
+        }
+    });
+
+    function liveRecv(data) {
+        equation_html.innerHTML = '('+data.n1+')' + ' + ' + '('+data.n2+')' + ' + ' + '('+data.n3+')' + ' + ' + '('+data.n4+')' + ' = ';
+    }
+
+    function sendValue(type) {
+        if (type == 'get') {
+            console.log("get the equation")
+            liveSend({'type': type});
+        } else if (type == 'submit') {
+            let answer = inputbox.value;
+            if (!/^-?\d+$/.test(answer)) {
+                error_msg.style.display = "block";
+                return;
+            } else {
+                console.log("sending!")
+                liveSend({'type': type, 'value': parseInt(answer), 'timestamp': Date.now()});
+                inputbox.value = "";
+                error_msg.style.display = "none";
+            }
+        }
+    }
+</script>
+{{ endblock }}
+

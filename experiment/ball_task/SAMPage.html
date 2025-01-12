@@ -1,0 +1,124 @@
+{{ block title }}
+    Part 4 - Self-Assessment Manikin
+<div class="title-line"></div>
+{{ endblock }}
+
+{{ block content }}
+    <style>
+        .sam-scale {
+            margin-bottom: 50px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .title-line {
+            border-bottom: 3px solid #e6f3ff;
+            margin: 20px 0;
+        }
+        .manikin-group {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            justify-content: space-between;
+            margin-bottom: 25px;
+            align-items: center;
+        }
+        .manikin-option {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .manikin-sprite {
+            width: 80px;
+            height: 80px;
+            border: 1px solid #ddd;
+            padding: 5px;
+            background-color: white;
+        }
+        .arousal-sprite {
+            background-image: url('{{ static "arousal_manikins.jpg" }}');
+            background-size: 720px 80px;
+        }
+        .valence-sprite {
+            background-image: url('{{ static "valence_manikins.jpg" }}');
+            background-size: 720px 80px;
+        }
+        .sprite-1 { background-position-x: 0px; }
+        .sprite-2 { background-position-x: -80px; }
+        .sprite-3 { background-position-x: -160px; }
+        .sprite-4 { background-position-x: -240px; }
+        .sprite-5 { background-position-x: -320px; }
+        .sprite-6 { background-position-x: -400px; }
+        .sprite-7 { background-position-x: -480px; }
+        .sprite-8 { background-position-x: -560px; }
+        .sprite-9 { background-position-x: -640px; }
+
+        .manikin-option input[type="radio"] {
+            margin: 0;
+            transform: scale(1.2);
+        }
+        .endpoint-label {
+            position: absolute;
+            font-size: 0.9em;
+            color: #333;
+        }
+        .endpoint-left {
+            margin-left: 25px;  /* Align with first radio button */
+        }
+        .endpoint-right {
+            right: 20px;  /* Align with last radio button */
+        }
+        .scale-row {
+            position: relative;
+            margin-bottom: 35px;
+            padding-bottom: 35px;
+            border-bottom:  2px solid #e6f3ff;;
+        }
+        p.instructions {
+            margin-bottom: 30px;
+            color: #333;
+            line-height: 1.5;
+        }
+    </style>
+
+    <div class="container">
+        <p class="instructions">
+            Before moving to the next round, take a moment to think about how you feel right now. Please use the scale below to rate how
+            strongly you are experiencing each emotion at this moment.
+        </p>
+
+        <div class="sam-scale">
+            <!-- Arousal Scale -->
+            <div class="scale-row">
+                <div class="manikin-group">
+                    {% for choice in form.excitement_sam %}
+                        <div class="manikin-option">
+                            <div class="manikin-sprite arousal-sprite sprite-{{ forloop.counter }}"></div>
+                            {{ choice }}
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="endpoint-label endpoint-left">Calm</div>
+                <div class="endpoint-label endpoint-right">Excited</div>
+            </div>
+
+            <!-- Valence Scale -->
+            <div class="scale-row">
+                <div class="manikin-group">
+                    {% for choice in form.happiness_sam %}
+                        <div class="manikin-option">
+                            <div class="manikin-sprite valence-sprite sprite-{{ forloop.counter }}"></div>
+                            {{ choice }}
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="endpoint-label endpoint-left">Sad</div>
+                <div class="endpoint-label endpoint-right">Happy</div>
+            </div>
+        </div>
+
+        {{ next_button }}
+    </div>
+{{ endblock }}

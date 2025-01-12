@@ -1,0 +1,65 @@
+{{ block title }}
+    Part 3 - Relaxation Video
+    <div class="title-line"></div>
+{{ endblock }}
+
+{{ block content }}
+    <style>
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            text-align: left;
+        }
+        .content-box {
+            background-color: #fefefe;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px;
+        }
+        .task-text {
+            margin: 20px 0;
+            line-height: 1.8;
+            font-size: 1.1em;
+        }
+        .title-line {
+            border-bottom: 3px solid #e6f3ff;
+            margin: 20px 0;
+        }
+        .instructions-header {
+            font-weight: bold;
+            font-size: 1.2em;
+            margin: 25px 0 15px 0;
+            color: #333;
+        }
+        .instructions-list {
+            list-style-type: disc;
+            margin: 20px 0;
+            padding-left: 25px;
+        }
+        .instructions-list li {
+            margin: 10px 0;
+            line-height: 1.6;
+        }
+    </style>
+
+    <div class="container">
+        <div class="content-box">
+            <div class="task-text">
+                Before moving on, we would like you to take a moment to relax and focus, as we want to measure your heart baseline. In this part of the experiment, you will watch a calming video featuring scenes from nature.
+                When the video ends, the experiment will proceed to the next phase.
+            </div>
+
+            <div class="title-line"></div>
+
+            <div class="instructions-header">Instructions</div>
+            <ul class="instructions-list">
+                <li>Put on the headphones connected to your computer.</li>
+                <li>You will now watch a relaxing 2.5 minute long video</li>
+                <li>Please just watch and try to relax as we will be measuring your baseline HR</li>
+            </ul>
+
+            {{ next_button }}
+        </div>
+    </div>
+{{ endblock }}

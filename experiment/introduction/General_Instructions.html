@@ -1,0 +1,55 @@
+{{ block title }}
+    General Instructions
+{{ endblock }}
+
+{{ block content }}
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        .title-line {
+            border-bottom: 2px solid #e6f3ff;
+            margin: 20px 0;
+        }
+        .main-text {
+            margin: 30px 0;
+            line-height: 1.5;
+            text-align: center;
+        }
+        .payment-text {
+            margin: 20px 0;
+        }
+        .highlight {
+            font-weight: bold;
+        }
+        .final-note {
+            font-weight: bold;
+            margin: 30px 0;
+        }
+    </style>
+
+    <div class="container">
+        <div class="title-line"></div>
+
+        <div class="main-text">
+            In the following part of the experiment, you will complete several tasks. Each
+            task will last 2 minutes, and there will be 5 repetitions for each task.
+        </div>
+
+        <div class="title-line"></div>
+
+        <div class="payment-text">
+            Your participation in the experiment is compensated with a
+            <span class="highlight">fixed payment of €6</span> . Additionally, a performance payment
+            will be paid based on a <span class="highlight">randomly picked</span> round of each task.
+        </div>
+
+        <div class="final-note">
+            Your final payment will depend on you—based on how good you perform!
+        </div>
+
+        {{ next_button }}
+    </div>
+{{ endblock }}

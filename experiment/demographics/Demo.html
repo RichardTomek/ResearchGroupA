@@ -1,0 +1,58 @@
+{{ block title }}
+    Part 5 - Demographics Questionnaire
+<div class="title-line"></div>
+{{ endblock }}
+
+{{ block content }}
+    <style>
+        .question {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e6f3ff;
+        }
+        /* Style for question labels */
+        .question > label {
+            display: block;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        /* Style for radio options */
+        input[type="radio"] {
+            margin-right: 8px;
+        }
+        /* Make radio button labels (options) normal weight */
+        label.radio {
+            margin-bottom: 10px;
+            font-weight: normal;
+            display: block;
+        }
+        .instructions {
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+        .title-line {
+            border-bottom: 3px solid #e6f3ff;
+            margin: 20px 0;
+    }
+    </style>
+
+    <div class="container">
+        <p class="instructions">
+            Thank you for completing the experiment! Before concluding, we would like to collect
+            some general demographic information. Please answer the following questions:
+        </p>
+
+        {% for field in form %}
+            <div class="question">
+                <label>{{ field.label }}</label>
+                <div class="options">{{ field }}</div>
+            </div>
+        {% endfor %}
+
+        {{ next_button }}
+    </div>
+{{ endblock }}
+
+
+
+

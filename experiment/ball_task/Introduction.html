@@ -1,0 +1,106 @@
+{{ block title }}
+    Part 4 - Ball-task
+<div class="title-line"></div>
+{{ endblock }}
+
+{{ block content }}
+    <style>
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            text-align: left;
+        }
+        .content-box {
+            background-color: #fefefe;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px;
+        }
+        .title-line {
+            border-bottom: 3px solid #e6f3ff;
+            margin: 20px 0;
+        }
+        .task-text {
+            margin: 20px 0;
+            line-height: 1.8;
+            font-size: 1.1em;
+        }
+        .round-header {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .section-header {
+            font-weight: bold;
+            font-size: 1.2em;
+            margin: 25px 0 15px 0;
+            color: #333;
+        }
+        .instructions-list {
+            list-style-type: disc;
+            margin: 15px 0;
+            padding-left: 25px;
+        }
+        .instructions-list li {
+            margin: 10px 0;
+            line-height: 1.6;
+        }
+        .next-button-container {
+            text-align: center;
+            margin-top: 20px;
+        }
+    </style>
+
+    <div class="container">
+        <div class="content-box">
+            <div class="round-header">
+                Instructions round: {{ player.round_number }} of {{ C.NUM_ROUNDS }}
+            </div>
+
+            <div class="task-text">
+                In this task, you will try to catch as many falling balls as possible using a movable basket.
+            </div>
+
+            <ul class="instructions-list">
+                    <li>Each round lasts {{ C.TIME_PER_ROUND_MINUTES }} minute, and there are {{ C.NUM_ROUNDS }} rounds in total.</li>
+                    <li>During a round, you can catch <b>as many balls as possible within the time limit</b>.</li>
+                    <li>For each ball caught, you will earn 0.05 EUR.</li>
+                    <li>The difficulty will remain the same in each round.</li>
+                    <li>At the end of this task section, one round will be <b>randomly</b> picked for which you will receive performance payout.</li>
+                </ul>
+
+            <div class="title-line"></div>
+            <div class="section-header">How it works:</div>
+            <ul class="instructions-list">
+                <li>
+                    Balls will fall continuously from the top of the screen.
+                </li>
+                <li>
+                    You can move the basket left or right either by clicking the "Left" or "Right" buttons, or by using the left and right arrow keys on your keyboard.
+                </li>
+            </ul>
+
+            <div class="title-line"></div>
+            <div class="section-header">Important notes:</div>
+            <ul class="instructions-list">
+                <li>
+                    There is no cost for moving the basket in this task,
+                    so feel free to move it as often as necessary to catch the balls.
+                </li>
+                <li>
+                    Each ball you catch gives you 0.05 EUR.
+                </li>
+            </ul>
+
+            <div class="task-text">
+                Click on "Next" to begin the task.
+            </div>
+        </div>
+    </div>
+
+    <div class="next-button-container">
+        {{ next_button }}
+    </div>
+{{ endblock }}

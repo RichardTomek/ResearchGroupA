@@ -1,0 +1,87 @@
+{{ block title }}
+    End of Experiment
+<div class="title-line"></div>
+{{ endblock }}
+
+{{ block content }}
+    <style>
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            text-align: left;
+        }
+        .content-box {
+            background-color: #fefefe;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px;
+        }
+        .title-line {
+            border-bottom: 3px solid #e6f3ff;
+            margin: 20px 0;
+        }
+        .thank-you {
+            font-size: 1.2em;
+            color: #333;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .payout-details {
+            margin: 25px 0;
+            line-height: 1.8;
+        }
+        .payout-summary {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .final-instructions {
+            margin: 25px 0;
+            font-weight: bold;
+            color: #333;
+        }
+        .goodbye {
+            text-align: center;
+            margin-top: 30px;
+            font-size: 1.1em;
+        }
+    </style>
+
+    <div class="container">
+        <div class="content-box">
+
+            <div class="thank-you">
+                Thank you very much for doing this experiment for us
+            </div>
+
+            <div class="title-line"></div>
+
+            <div class="payout-details">
+                As a bonus to your attendance payout:
+                <ul>
+                    <li>Math-task round {{ player.participant.math_task_win_round }} was picked randomly where you achieved {{ player.participant.math_task_win_points }}</li>
+                    <li>Ball-task round {{ player.participant.ball_task_win_round }} was picked randomly where you achieved {{ player.participant.ball_task_win_points }}</li>
+                </ul>
+            </div>
+
+            <div class="payout-summary">
+
+
+                Your final payout consists of:
+                <ul>
+                    <li>Attendance payment: €6</li>
+                    <li><strong>Total payment: {{ total_payout }}</strong></li>
+                </ul>
+            </div>
+
+
+            <div class="final-instructions">
+                Please remain seated. You may use your phone while waiting for others to finish.
+                Once everyone has completed the experiment, please remove the heart rate sensor and show it to the experiment personnel to receive your payout.
+            </div>
+
+        </div>
+    </div>
+{{ endblock }}

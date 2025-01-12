@@ -1,0 +1,75 @@
+{{ block title }}
+    Emotion Questionnaire
+{{ endblock }}
+
+{{ block content }}
+  <p>Before moving to the next round, take a moment to think about how you feel right now.
+      Please use the scale below to rate how strongly you are experiencing each emotion at
+      this moment. (mix them not all negative and then all positive)
+  </p>
+    <style>
+        .emotion-scale {
+            margin-bottom: 30px;
+            padding-bottom: 30px;
+            border-bottom: 2px solid #e6f3ff;
+        }
+        .emotion-label {
+            font-weight: bold;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+        .radio-group {
+            display: inline-flex;
+            gap: 35px;
+            width: 100%;
+            max-width: 900px;
+            justify-content: space-between;
+        }
+        .radio-option {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            min-width: 85px;
+        }
+        .radio-option input[type="radio"] {
+            margin-bottom: 8px;
+        }
+        .radio-option label {
+            font-size: 0.85em;
+            text-align: center;
+            line-height: 1.2;
+        }
+        .card {
+            padding: 30px;
+            background-color: white;
+            border-radius: 8px;
+        }
+        .card-body {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+    </style>
+
+    <div class="card">
+        <div class="card-body">
+            {% for field in form %}
+                <div class="emotion-scale">
+                    <div class="emotion-label">{{ field.label }}</div>
+                    <div class="radio-group">
+                        {% for value, text in field.choices %}
+                            <div class="radio-option">
+                                <input type="radio" name="{{ field.name }}" value="{{ value }}" required
+                                       id="{{ field.name }}_{{ value }}">
+                                <label for="{{ field.name }}_{{ value }}">{{ text }}</label>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+
+            {{ next_button }}
+        </div>
+    </div>
+
+{{ endblock }}

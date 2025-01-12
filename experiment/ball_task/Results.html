@@ -1,0 +1,18 @@
+{{ block title }}Part 4 - Results round: {{ player.round_number }} of {{ C.NUM_ROUNDS }}
+<div class="title-line"></div>
+{{ endblock }}
+{{ block content }}
+<style>
+        .title-line {
+            border-bottom: 3px solid #e6f3ff;
+            margin: 20px 0;
+        }
+    </style>
+
+    <h4>You caught {{ player.balls_caught }} out of {{ player.balls_total }} balls ({{ catch_rate }}%)</h4>
+
+    You will be forwarded to the next page in {{ C.TIME_RESULT }} seconds or click on "Next" button to proceed.
+
+    {{ next_button }}
+
+{{ endblock }}

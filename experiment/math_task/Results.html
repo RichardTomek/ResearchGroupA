@@ -1,0 +1,20 @@
+{{ block title }}
+    Part 2 - Results round: {{ player.round_number }} of {{ C.NUM_ROUNDS }}
+<div class="title-line"></div>
+{{ endblock }}
+
+{{ block content }}
+<style>
+        .title-line {
+            border-bottom: 3px solid #e6f3ff;
+            margin: 20px 0;
+        }
+    </style>
+
+    <h4>You managed to solve {{player.count_correct}} out of {{player.count_equations}} attempted equations</h4>
+
+    You will be forwarded to the next page in {{ C.TIME_RESULT }} seconds or click on "Next" button to proceed.
+
+    {{ next_button }}
+
+{{ endblock }}

@@ -1,0 +1,12 @@
+[server]
+host = "192.168.1.15"
+port = 8001
+participant_label_file = "_rooms/pretest.txt"
+
+[database]
+url = "postgres://otree_user:researchlaba@localhost:5432/django_db"
+
+[client]
+send_rate = 1
+sample_rate_per_send = 10
+lock_key = "admin"

@@ -1,0 +1,112 @@
+{{ block title }}
+    Part 2 - Math-task
+<div class="title-line"></div>
+{{ endblock }}
+
+{{ block content }}
+    <style>
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            text-align: left;
+        }
+        .content-box {
+            background-color: #fefefe;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px;
+        }
+        .title-line {
+            border-bottom: 3px solid #e6f3ff;
+            margin: 20px 0;
+        }
+        .task-text {
+            margin: 20px 0;
+            line-height: 1.8;
+            font-size: 1.1em;
+        }
+        .round-header {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .section-header {
+            font-weight: bold;
+            font-size: 1.2em;
+            margin: 25px 0 15px 0;
+            color: #333;
+        }
+        .instructions-list {
+            list-style-type: disc;
+            margin: 15px 0;
+            padding-left: 25px;
+        }
+        .instructions-list li {
+            margin: 10px 0;
+            line-height: 1.6;
+        }
+        .next-button-container {
+            text-align: center;
+            margin-top: 20px;
+        }
+    </style>
+
+    <div class="container">
+        <div class="content-box">
+            <div class="round-header">
+                Instructions round: {{ player.round_number }} of {{ C.NUM_ROUNDS }}
+            </div>
+
+            <div class="task-text">
+                In this task, you will solve a series of math problems.
+                Specifically, you will be summing up four 2-digit numbers.
+            </div>
+
+                <ul class="instructions-list">
+                    <li>Each round lasts {{ C.TIME_PER_ROUND_MINUTES }} minute, and there are {{ C.NUM_ROUNDS }} rounds in total.</li>
+                    <li>During a round, you can solve <b>as many equations as possible within the time limit</b>.</li>
+                    <li>For each correct answer, you will earn 0.5 EUR.</li>
+                    <li>The difficulty will not increase with each round, so it will remain the same throughout.</li>
+                    <li>At the end of this task section one round will be <b>randomly</b> picked for which you will receive performance payout.</li>
+                </ul>
+
+            <div class="title-line"></div>
+                <div class="section-header">How it works:</div>
+                <ul class="instructions-list">
+                    <li>
+                        You will be shown a set of four 2-digit numbers to add together (e.g., 28 + 47 + 63 + 52).
+                    </li>
+                    <li>
+                        Enter your result into the input field and submit your answer by clicking the "Submit" button.
+                    </li>
+                    <li>
+                        Once your answer is submitted, a new set of numbers will appear, and you can continue solving.
+                    </li>
+                </ul>
+                <div class="title-line"></div>
+            <div class="section-header">Important notes:</div>
+            <ul class="instructions-list">
+                <li>
+                    Correct answers will earn you extra payout.
+                </li>
+                <li>
+                    Answering incorrectly does <b>nothing</b> to your overall payout.
+                </li>
+                <li>
+                    <b>The use of external tools such as calculators, pen and paper, smartphones, or other aids is strictly prohibited.</b>
+                </li>
+
+            </ul>
+
+            <div class="task-text">
+                Click on "Next" to begin the task.
+            </div>
+        </div>
+    </div>
+
+    <div class="next-button-container">
+        {{ next_button }}
+    </div>
+{{ endblock }}

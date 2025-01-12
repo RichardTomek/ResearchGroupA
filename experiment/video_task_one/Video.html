@@ -1,0 +1,138 @@
+{{ block title }}
+<div id="title" class="text-xl text-center mb-2">Please wait for the video to load</div>
+{{ endblock }}
+
+{{ block content }}
+<style>
+    .otree-title.page-header {
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+        padding-top: 0 !important;
+    }
+
+    .video-wrapper {
+        position: relative;
+        width: 100%;
+        height: calc(100vh - 100px);
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: center; /* Center the video container */
+    }
+
+    .video-container {
+        position: relative;
+        height: calc(100% - 60px);
+        display: inline-flex; /* This makes it wrap around content */
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    video {
+        height: 100%;
+        width: auto; /* Let video maintain aspect ratio */
+        max-width: 100%;
+        object-fit: contain;
+    }
+
+    #content {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .controls-container {
+        width: 100%;
+        padding: 5px;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+        margin-bottom: 10px;
+    }
+
+    #volumeSlider {
+        flex: 1;
+        min-width: 100px;
+        max-width: 300px;
+    }
+
+    .container, .otree-body {
+        width: 100% !important;
+        max-width: 95vw !important;
+        margin: 0 auto;
+        padding: 0.5rem !important;
+    }
+
+    .btn {
+        margin-bottom: 0;
+        height: auto;
+        min-height: 38px;
+    }
+
+    @media (max-height: 600px) {
+        #title {
+            font-size: 1rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .video-wrapper {
+            height: calc(100vh - 80px);
+        }
+    }
+</style>
+
+<div id="content" style="display: none">
+    <div class="video-wrapper">
+        <div class="video-container">
+            <video id='relaxVideo' disablePictureInPicture>
+                <source src="{{ static 'global/video1small.mp4'}}" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+            <div class="controls-container">
+                <label for="volumeSlider">Volume:</label>
+                <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="0.5">
+                <button id="playButton" class="otree-btn-next btn btn-primary" type="button" onclick="playVideo()">Play</button>
+                <button id="nextButton" style="display: none;">Next</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const video = document.getElementById('relaxVideo');
+        const nextButton = document.getElementById('nextButton');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const content = document.getElementById('content');
+        const title = document.getElementById('title');
+
+        video.addEventListener('canplay', function() {
+            title.innerHTML = "Play the video and try to relax :)";
+            content.style.display = 'block';
+        });
+
+        video.addEventListener('ended', function() {
+            nextButton.click();
+        });
+
+        volumeSlider.addEventListener('input', function() {
+            video.volume = this.value;
+        });
+    });
+
+    function playVideo() {
+        const video = document.getElementById('relaxVideo');
+        const playButton = document.getElementById('playButton');
+        video.play();
+        playButton.style.display = 'none';
+
+        liveSend({
+            'type': 'video_start'
+        });
+    }
+</script>
+{{ endblock }}
