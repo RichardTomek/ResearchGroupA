@@ -1,0 +1,2069 @@
+# Load and install ALL packages required for the entire analysis. This may take a while...
+
+```{r}
+library(here)
+
+required_packages <- c("tidyverse", "dtwclust", "RHRV", "cluster")
+required_packages <- c(required_packages, c("here", "tidyverse", "ggplot2", "dtwclust", "TSclust", "cluster", "parallel", "doSNOW", "mclust"))
+required_packages <- c(required_packages, "here", "tidyverse", "ggplot2", "dtwclust", "TSclust", "cluster", "parallel", "doFuture", "mclust", "RHRV", "pracma", "cluster", "foreach", "kohonen", "mclust", "dbscan", "R.utils", "progressr", "doRNG", "combinat", "Rtsne", "GGally")
+required_packages <- c(required_packages, "here", "tidyverse", "ggplot2", "dtwclust", "TSclust", "cluster", "parallel", "doFuture", "mclust", "RHRV", "pracma", "cluster", "foreach", "kohonen", "mclust", "dbscan", "R.utils", "progressr", "doRNG", "combinat", "Rtsne", "GGally")
+required_packages <- c(required_packages, "tidyverse", "ggplot2", "nnet", "stats", "ordinal", "lme4", "broom.mixed", "car", "brms", "corrplot", "performance", "reshape2", "lmerTest")
+
+
+
+# Load & Install packages based on a vector of strings
+load_packages <- function(packages) {
+  # Loop through each package
+  lapply(packages, function(pkg) {
+    # Check if package is installed
+    if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
+      # If not installed, install it
+      message(sprintf("Installing package: %s", pkg))
+      install.packages(pkg, dependencies = TRUE)
+      # Load the newly installed package
+      library(pkg, character.only = TRUE)
+    } else {
+      # If already installed, just load it
+      message(sprintf("Loading package: %s", pkg))
+    }
+  })
+}
+
+
+load_packages(required_packages)
+```
+
+# Load some helper functions
+
+```{r}
+# Function for plotting HR data
+plot_heart_rate <- function(data, x, y, group, title, subtitle, x_label, y_label, legend_title) {
+  ggplot(data, aes_string(x = x, y = y)) +
+    # Add individual session lines and points with very low opacity
+    geom_point(aes_string(color = group), alpha = 0.1) +
+    geom_line(aes_string(color = group, group = group), alpha = 0.1) +
+    # Add smoothed trend line for each session with low opacity using stat_smooth
+    stat_smooth(
+      aes_string(color = group, group = group),
+      geom = "line",
+      method = "loess",
+      alpha = 0.5,
+      se = FALSE
+    ) +
+    # Add overall trend line (black) with higher opacity
+    stat_smooth(
+      color = "black",
+      geom = "line",
+      method = "loess",
+      alpha = 0.8,
+      se = TRUE,
+      linewidth = 1.2
+    ) +
+    # Customize the appearance
+    theme_minimal() +
+    labs(
+      title = title,
+      subtitle = subtitle,
+      x = x_label,
+      y = y_label,
+      color = legend_title
+    ) +
+    theme(
+      legend.position = "right",
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+      plot.subtitle = element_text(hjust = 0.5, size = 12),
+      axis.title = element_text(size = 12),
+      legend.title = element_text(size = 12),
+      legend.text = element_text(size = 10)
+    ) +
+    # Use a colorblind-friendly palette
+    scale_color_viridis_d()
+}
+
+plot_ts_clusters <- function(ts_data, clustering, k = 2) {
+  # Handle cluster assignments based on clustering type
+  if (inherits(clustering, "PartitionalTSClusters")) {
+    # For partitional clustering, create a named vector of cluster assignments
+    cluster_assignments <- setNames(
+      clustering@cluster,
+      names(ts_data)
+    )
+    use_centroids <- TRUE
+    centroids <- clustering@centroids
+  } else {
+    # For hierarchical clustering, cluster assignments are already named
+    cluster_assignments <- clustering@cluster
+    use_centroids <- FALSE
+  }
+  
+  # Convert the list of time series to a long format dataframe
+  df <- do.call(rbind, lapply(names(ts_data), function(name) {
+    data.frame(
+      time = seq_along(ts_data[[name]]),
+      value = ts_data[[name]],
+      series = name,
+      task = ifelse(grepl("math", name), "math", "ball"),
+      cluster = cluster_assignments[name],
+      row.names = NULL
+    )
+  }))
+  
+  # Create base plot
+  p <- ggplot(df, aes(x = time, y = value)) +
+    geom_line(aes(group = series, color = task), alpha = 0.2, linewidth = 0.8) +
+    scale_color_manual(values = c(
+      "ball" = "#1F77B4",
+      "math" = "#FF7F0E"
+    ))
+  
+  # Add either centroids or smoothed line based on clustering type
+  if (use_centroids) {
+    # Convert centroids to data frame for plotting
+    centroid_df <- do.call(rbind, lapply(1:length(centroids), function(i) {
+      data.frame(
+        time = seq_along(centroids[[i]]),
+        value = centroids[[i]],
+        cluster = i
+      )
+    }))
+    
+    p <- p + geom_line(data = centroid_df, 
+                       aes(x = time, y = value, group = 1),
+                       color = "black",
+                       alpha = 0.7,
+                       linewidth = 0.8)
+  } else {
+    p <- p + stat_smooth(
+      aes(group = 1),
+      color = "black",
+      method = "loess",
+      se = TRUE,
+      alpha = 0.7,
+      linewidth = 0.8
+    )
+  }
+  
+  # Add remaining plot elements
+  p + facet_wrap(~cluster, ncol = 1, 
+                 labeller = labeller(cluster = function(x) paste("Cluster", x))) +
+    theme_minimal() +
+    theme(
+      panel.grid.minor = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.major.y = element_line(color = "gray90"),
+      text = element_text(family = "Arial"),
+      plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+      plot.subtitle = element_text(hjust = 0.5, size = 12),
+      axis.title = element_text(size = 12),
+      legend.title = element_text(size = 12),
+      legend.text = element_text(size = 10),
+      legend.position = "right",
+      strip.text = element_text(size = 12, face = "bold")
+    ) +
+    labs(
+      title = "Time Series Clusters by Task Type",
+      x = "Time Point",
+      y = "Value",
+      color = "Task Type"
+    )
+}
+
+df_to_ts <- function(ball_task, math_task) {
+  combined_data <- bind_rows(
+    ball_task %>% mutate(task = "ball"),
+    math_task %>% mutate(task = "math")
+  )
+  
+  ts_list <- combined_data %>%
+    group_by(session_label, round_number, task) %>%
+    arrange(time_elapsed) %>%
+    summarise(
+      ts = list(as.numeric(heart_rate_z)),  # Explicitly convert to numeric
+      .groups = "drop"
+    )
+  
+  # Convert to a list of numeric vectors
+  ts_data <- ts_list$ts
+  names(ts_data) <- paste(ts_list$session_label, ts_list$round_number, ts_list$task)
+  
+  # Verify data is numeric
+  if(!all(sapply(ts_data, is.numeric))) {
+    stop("Not all time series are numeric")
+  }
+  
+  # Store metadata
+  attr(ts_data, "metadata") <- ts_list %>% select(-ts)
+  
+  return(ts_data)
+}
+
+```
+
+## Load data
+Define which csv file should be loaded for which task. From here on, df with the names `ball_task`, `math_task`, `video_one`, `video_two` are available which have the corresponding HR data. Only specify the file name + .csv ending - the code assumes the files are in a dir called `data` which should be located "next" to this notebook.
+
+```{r}
+file_mapping <- c(
+  "ball_task_lab_run_18_12.csv" = "ball_task",
+  "math_task_lab_run_18_12.csv" = "math_task",
+  "video_one_lab_run_18_12.csv" = "video_one",
+  "video_two_lab_run_18_12.csv" = "video_two"
+)
+
+# Read all files and assign them to the workspace with desired names
+walk2(
+  names(file_mapping),
+  file_mapping,
+  ~assign(
+    .y,
+    read_csv(here("data", .x)),
+    envir = .GlobalEnv
+  )
+)
+
+# Clean up environment (keeping only the data frames and helper functions)
+# rm(list = setdiff(ls(), c(file_mapping, "helper")))
+```
+
+## Preprocess data
+Here we:
+- create a unique id (session_label) for each participant because lable or session on their own may not be unique
+- normalize the data using z-score normalization
+- introduce `time_elapsed` which are the seconds since the start of the task for each HR reading for each participant (for each round). 
+
+Todo: 
+- We are right now not extracting / using the RR intervals
+- There is something a little weird with Mako in the ball task round one - where the first reading is already at "second two". `min(time_recorded)` returns a time 2 seconds before the actual min reading for this participant for some reason.
+
+```{r}
+video_one <- video_one %>%
+  mutate(session_label = paste(session_code, label, sep = "_")) %>%
+  group_by(session_label) %>%
+  mutate(heart_rate_z = (heart_rate - mean(heart_rate, na.rm = TRUE)) / sd(heart_rate, na.rm = TRUE)) %>%
+  mutate(
+    time_recorded = ymd_hms(time_recorded),
+    # Calculate time elapsed in minutes from first recording of each session
+    time_elapsed = as.numeric(
+      difftime(time_recorded, 
+              min(time_recorded),
+              units = "sec")
+    )
+  ) %>%
+  ungroup()
+
+video_two <- video_two %>%
+  mutate(session_label = paste(session_code, label, sep = "_")) %>%
+  group_by(session_label) %>%
+  mutate(heart_rate_z = (heart_rate - mean(heart_rate, na.rm = TRUE)) / sd(heart_rate, na.rm = TRUE)) %>%
+  mutate(
+    time_recorded = ymd_hms(time_recorded),
+    # Calculate time elapsed in minutes from first recording of each session
+    time_elapsed = as.numeric(
+      difftime(time_recorded, 
+              min(time_recorded),
+              units = "sec")
+    )
+  ) %>%
+  ungroup()
+
+ball_task <- ball_task %>%
+  mutate(session_label = paste(session_code, label, sep = "_")) %>%
+  group_by(session_label, round_number) %>%
+  mutate(heart_rate_z = (heart_rate - mean(heart_rate, na.rm = TRUE)) / sd(heart_rate, na.rm = TRUE)) %>%
+  mutate(
+    time_recorded = ymd_hms(time_recorded),
+    # Calculate time elapsed in minutes from first recording of each session
+    time_elapsed = as.numeric(
+      difftime(time_recorded, 
+              min(time_recorded),
+              units = "sec")
+    )
+  ) %>%
+  ungroup()
+
+math_task <- math_task %>%
+  mutate(session_label = paste(session_code, label, sep = "_")) %>%
+  group_by(session_label, round_number) %>%
+  mutate(heart_rate_z = (heart_rate - mean(heart_rate, na.rm = TRUE)) / sd(heart_rate, na.rm = TRUE)) %>%
+  mutate(
+    time_recorded = ymd_hms(time_recorded),
+    # Calculate time elapsed in minutes from first recording of each session
+    time_elapsed = as.numeric(
+      difftime(time_recorded, 
+              min(time_recorded),
+              units = "sec")
+    )
+  ) %>%
+  ungroup()
+
+```
+
+## Initial Plots
+
+```{r, fig.width=10, fig.height=7, dpi=300}
+
+# Normalized HR during video one
+plot_heart_rate(
+  data = video_one,
+  x = "time_elapsed",
+  y = "heart_rate_z",
+  group = "session_label",
+  title = "Heart Rate Over Time by Participant (Video One)",
+  subtitle = "Original Data\nBlack line shows overall trend",
+  x_label = "Time Elapsed (minutes)",
+  y_label = "Heart Rate (bpm)",
+  legend_title = "Session"
+)
+
+# Normalized HR during video two
+plot_heart_rate(
+  data = video_two,
+  x = "time_elapsed",
+  y = "heart_rate_z",
+  group = "session_label",
+  title = "Heart Rate Over Time by Participant (Video Two)",
+  subtitle = "Original Data\nBlack line shows overall trend",
+  x_label = "Time Elapsed (minutes)",
+  y_label = "Heart Rate (bpm)",
+  legend_title = "Session"
+)
+
+# Overall trend over all rounds for the math task
+
+# Prepare the data with time buckets
+math_task_trends <- math_task %>%
+  # Create 1-second time buckets
+  mutate(
+    time_bucket = floor(time_elapsed)
+  ) %>%
+  # Group by round and time buckets
+  group_by(round_number, time_bucket) %>%
+  # Calculate mean heart rate for each time bucket in each round
+  summarise(
+    heart_rate_z = mean(heart_rate_z, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  # Create a unique identifier for each round for the plotting function
+  mutate(
+    session_label = paste("Round", round_number),
+    # Use the time bucket as our time_elapsed for plotting
+    time_elapsed = time_bucket
+  )
+
+# Use your existing plotting function
+plot_heart_rate(
+  data = math_task_trends,
+  x = "time_elapsed",
+  y = "heart_rate_z",
+  group = "session_label",
+  title = "Average Heart Rate Trends Across All Rounds",
+  subtitle = "Each line represents the average trend for a round\nBlack line shows overall trend across rounds",
+  x_label = "Time Elapsed (seconds)",
+  y_label = "Average Standardized Heart Rate (z-score)",
+  legend_title = "Round"
+)
+
+# Prepare the data with time buckets
+ball_task_trends <- ball_task %>%
+  # Create 1-second time buckets
+  mutate(
+    time_bucket = floor(time_elapsed)
+  ) %>%
+  # Group by round and time buckets
+  group_by(round_number, time_bucket) %>%
+  # Calculate mean heart rate for each time bucket in each round
+  summarise(
+    heart_rate_z = mean(heart_rate_z, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  # Create a unique identifier for each round for the plotting function
+  mutate(
+    session_label = paste("Round", round_number),
+    # Use the time bucket as our time_elapsed for plotting
+    time_elapsed = time_bucket
+  )
+
+# Use your existing plotting function
+plot_heart_rate(
+  data = ball_task_trends,
+  x = "time_elapsed",
+  y = "heart_rate_z",
+  group = "session_label",
+  title = "Average Heart Rate Trends Across All Rounds",
+  subtitle = "Each line represents the average trend for a round\nBlack line shows overall trend across rounds",
+  x_label = "Time Elapsed (seconds)",
+  y_label = "Average Standardized Heart Rate (z-score)",
+  legend_title = "Round"
+)
+
+rm(list = c("ball_task_trends", "math_task_trends"))
+
+```
+
+There seems to be an issue with the round duration! All rounds should be 60s in length! We assume this to be an issue with frisbee or our SQL pre-processing querries. We narrowed it down to readings being incorrectly assigned to the following round even doe they should still be part of the previous round. Lets try re-calculating the round number based on the time gaps between readings. If we see a gap larger than 10s we assume that the readings are from different rounds, if we see gaps of less than 10s we assume the readings to be part of the same round. 
+
+```{r}
+# This first calculates the correct round number and then re-calculates the normalized HR and elapsed time based on the new round numbers
+ball_task <- ball_task %>%
+  # First ensure data is ordered chronologically within each participant
+  arrange(session_label, time_recorded) %>%
+  group_by(session_label) %>%
+  mutate(
+    # Calculate time difference between consecutive readings
+    time_diff = as.numeric(difftime(
+      time_recorded, 
+      lag(time_recorded, default = first(time_recorded)),
+      units = "secs"
+    )),
+    # Create new round numbers based on gaps > 10s
+    round_number = cumsum(time_diff > 10 | row_number() == 1)
+  ) %>%
+  # Now recalculate z-scores and time_elapsed based on new rounds
+  group_by(session_label, round_number) %>%
+  mutate(
+    heart_rate_z = (heart_rate - mean(heart_rate, na.rm = TRUE)) / sd(heart_rate, na.rm = TRUE),
+    time_elapsed = as.numeric(
+      difftime(time_recorded, 
+              min(time_recorded),
+              units = "sec")
+    )
+  ) %>%
+  ungroup()
+
+# Prepare the data with time buckets
+ball_task_trends <- ball_task %>%
+  # Create 1-second time buckets
+  mutate(
+    time_bucket = floor(time_elapsed)
+  ) %>%
+  # Group by round_number and time buckets
+  group_by(round_number, time_bucket) %>%
+  # Calculate mean heart rate for each time bucket in each round
+  summarise(
+    heart_rate_z = mean(heart_rate_z, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  # Create a unique identifier for each round for the plotting function
+  mutate(
+    session_label = paste("Round", round_number),
+    # Use the time bucket as our time_elapsed for plotting
+    time_elapsed = time_bucket
+  )
+
+# Use your existing plotting function
+plot_heart_rate(
+  data = ball_task_trends,
+  x = "time_elapsed",
+  y = "heart_rate_z",
+  group = "session_label",
+  title = "Average Heart Rate Trends Across All Rounds (Ball Task)",
+  subtitle = "Each line represents the average trend for a round\nBlack line shows overall trend across rounds",
+  x_label = "Time Elapsed (seconds)",
+  y_label = "Average Standardized Heart Rate (z-score)",
+  legend_title = "Round"
+)
+
+
+math_task <- math_task %>%
+  # First ensure data is ordered chronologically within each participant
+  arrange(session_label, time_recorded) %>%
+  group_by(session_label) %>%
+  mutate(
+    # Calculate time difference between consecutive readings
+    time_diff = as.numeric(difftime(
+      time_recorded, 
+      lag(time_recorded, default = first(time_recorded)),
+      units = "secs"
+    )),
+    # Create new round numbers based on gaps > 10s
+    round_number = cumsum(time_diff > 10 | row_number() == 1)
+  ) %>%
+  # Now recalculate z-scores and time_elapsed based on new rounds
+  group_by(session_label, round_number) %>%
+  mutate(
+    heart_rate_z = (heart_rate - mean(heart_rate, na.rm = TRUE)) / sd(heart_rate, na.rm = TRUE),
+    time_elapsed = as.numeric(
+      difftime(time_recorded, 
+              min(time_recorded),
+              units = "sec")
+    )
+  ) %>%
+  ungroup()
+
+# Prepare the data with time buckets
+math_task_trends <- math_task %>%
+  # Create 1-second time buckets
+  mutate(
+    time_bucket = floor(time_elapsed)
+  ) %>%
+  # Group by round_number and time buckets
+  group_by(round_number, time_bucket) %>%
+  # Calculate mean heart rate for each time bucket in each round
+  summarise(
+    heart_rate_z = mean(heart_rate_z, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  # Create a unique identifier for each round for the plotting function
+  mutate(
+    session_label = paste("Round", round_number),
+    # Use the time bucket as our time_elapsed for plotting
+    time_elapsed = time_bucket
+  )
+
+# Use your existing plotting function
+plot_heart_rate(
+  data = math_task_trends,
+  x = "time_elapsed",
+  y = "heart_rate_z",
+  group = "session_label",
+  title = "Average Heart Rate Trends Across All Rounds (Math Task)",
+  subtitle = "Each line represents the average trend for a round\nBlack line shows overall trend across rounds",
+  x_label = "Time Elapsed (seconds)",
+  y_label = "Average Standardized Heart Rate (z-score)",
+  legend_title = "Round"
+)
+
+```
+Now it seems like all of our rounds are correctly calculated to be 60s long. 
+
+## Time-Series Clustering!
+
+```{r}
+# Modified data preparation function
+prepare_ts_data <- function(ball_task, math_task) {
+  combined_data <- bind_rows(
+    ball_task %>% mutate(task = "ball"),
+    math_task %>% mutate(task = "math")
+  )
+  
+  ts_list <- combined_data %>%
+    group_by(session_label, round_number, task) %>%
+    arrange(time_elapsed) %>%
+    summarise(
+      ts = list(as.numeric(heart_rate_z)),  # Explicitly convert to numeric
+      .groups = "drop"
+    )
+  
+  # Convert to a list of numeric vectors
+  ts_data <- ts_list$ts
+  names(ts_data) <- paste(ts_list$session_label, ts_list$round_number, ts_list$task)
+  
+  # Verify data is numeric
+  if(!all(sapply(ts_data, is.numeric))) {
+    stop("Not all time series are numeric")
+  }
+  
+  # Store metadata
+  attr(ts_data, "metadata") <- ts_list %>% select(-ts)
+  
+  return(ts_data)
+}
+
+ts_cluster_data <- prepare_ts_data(ball_task, math_task)
+
+```
+
+We have (very slightly) different length time series here, thus we cannot use fuzzy clustering. We will investigate some other types and try out different distance measures / centroids
+
+
+
+```{r}
+# Modified grid search function with ground truth validation
+grid_search_clustering <- function(data, 
+                                 k_range = 2:4,
+                                 methods = c("partitional", "hierarchical"),
+                                 distances = c("dtw", "dtw2", "sbd", "gak", "lbk", "sdtw"),
+                                 centroids = list(
+                                   partitional = c("pam", "dba", "shape", "fcmdd", "sdtw_cent")
+                                   # hierarchical = c("pam")
+                                 ),
+                                 cores = detectCores()) {
+  
+  # Extract ground truth labels from the data names
+  true_labels <- sapply(strsplit(names(data), " "), function(x) x[3])  # Get the task type
+  
+  # Create combinations for each method separately and then combine them
+  combinations_list <- list()
+  
+  for (method in methods) {
+      # Create grid for current method with its specific centroids
+      method_grid <- expand.grid(
+          method = method,
+          distance = distances,
+          k = k_range,
+          centroid = centroids[[method]],
+          stringsAsFactors = FALSE
+      )
+      combinations_list[[method]] <- method_grid
+  }
+  
+  # Combine all method-specific grids
+  combinations <- do.call(rbind, combinations_list)
+  
+  # Set up parallel processing
+  if(cores > 1) {
+    cluster <- makeCluster(cores)
+    registerDoSNOW(cluster)
+    on.exit(stopCluster(cluster))
+    
+  }
+  
+  # Set up progress bar
+  total_combinations <- nrow(combinations)
+  pb <- txtProgressBar(min = 0, max = total_combinations, style = 3)
+  progress <- function(n) setTxtProgressBar(pb, n)
+  
+  # Parallel processing of combinations
+  results_list <- foreach(i = 1:nrow(combinations), 
+                         .packages = c("dtwclust", "dplyr", "mclust"),  # Added mclust for ARI
+                         .errorhandling = "pass",
+                         .options.snow = list(progress = progress)) %dopar% {
+    
+    method <- combinations$method[i]
+    dist <- combinations$distance[i]
+    cent <- combinations$centroid[i]
+    k <- combinations$k[i]
+    
+    tryCatch({
+      # Clustering based on method
+      if(method == "partitional") {
+        cluster_obj <- tsclust(data,
+                             type = method,
+                             k = k,
+                             distance = dist,
+                             centroid = cent,
+                             control = partitional_control(nrep = 1),
+                             args = list(dist.params = list(window.size = 20)),
+                             seed = 123)
+      } else if(method == "hierarchical") {
+        cluster_obj <- tsclust(data,
+                             type = method,
+                             k = k,
+                             distance = dist,
+                             centroid = cent,
+                             control = hierarchical_control(),
+                             args = list(dist.params = list(window.size = 20)),
+                             seed = 123)
+      } else if(method == "fuzzy") {
+        cluster_obj <- tsclust(data,
+                             type = method,
+                             k = k,
+                             distance = dist,
+                             centroid = cent,
+                             control = fuzzy_control(fuzziness = 2),
+                             args = list(dist.params = list(window.size = 20)),
+                             seed = 123)
+      }
+      
+      # Get cluster assignments
+      cluster_labels <- cluster_obj@cluster
+      
+      # Calculate validation indices
+      sil <- tryCatch(cvi(cluster_obj, type = "Sil"), error = function(e) NA)
+      db <- tryCatch(cvi(cluster_obj, type = "DB"), error = function(e) NA)
+      ch <- tryCatch(cvi(cluster_obj, type = "CH"), error = function(e) NA)
+      
+      # Calculate Adjusted Rand Index
+      ari <- adjustedRandIndex(cluster_labels, as.factor(true_labels))
+      
+      # Calculate accuracy (after matching clusters to tasks)
+      # This requires finding the best mapping between cluster numbers and tasks
+      unique_clusters <- unique(cluster_labels)
+      unique_tasks <- unique(true_labels)
+      
+      # Try both possible mappings (for k=2) and take the better one
+      if(k == 2) {
+        accuracy1 <- mean(cluster_labels == as.numeric(factor(true_labels)))
+        accuracy2 <- mean(cluster_labels == (3 - as.numeric(factor(true_labels))))
+        accuracy <- max(accuracy1, accuracy2)
+      } else {
+        # For k != 2, just use basic accuracy
+        accuracy <- mean(cluster_labels == as.numeric(factor(true_labels)))
+      }
+      
+      # Return results
+      list(
+        result = data.frame(
+          method = method,
+          distance = dist,
+          centroid = cent,
+          k = k,
+          silhouette = sil,
+          davies_bouldin = db,
+          calinski_harabasz = ch,
+          adjusted_rand_index = ari,
+          accuracy = accuracy,
+          error = FALSE,
+          error_message = NA_character_
+        ),
+        cluster_obj = cluster_obj
+      )
+      
+    }, error = function(e) {
+      list(
+        result = data.frame(
+          method = method,
+          distance = dist,
+          centroid = cent,
+          k = k,
+          silhouette = NA_real_,
+          davies_bouldin = NA_real_,
+          calinski_harabasz = NA_real_,
+          adjusted_rand_index = NA_real_,
+          accuracy = NA_real_,
+          error = TRUE,
+          error_message = conditionMessage(e)
+        ),
+        cluster_obj = NULL
+      )
+    })
+  }
+  
+  # Process results
+  results_df <- do.call(rbind, lapply(results_list, function(x) x$result))
+  successful_results <- results_df[!results_df$error, ]
+  failed_results <- results_df[results_df$error, ]
+  
+  # Store clustering objects
+  all_results <- list()
+  for(i in seq_along(results_list)) {
+    if(!is.null(results_list[[i]]$cluster_obj)) {
+      key <- with(results_list[[i]]$result,
+                 paste(method, distance, centroid, k, sep = "_"))
+      all_results[[key]] <- results_list[[i]]$cluster_obj
+    }
+  }
+  
+  close(pb)
+  
+  return(list(
+    summary = successful_results,
+    full_results = all_results,
+    failed_combinations = failed_results
+  ))
+}
+
+
+
+# Run the grid search
+results <- grid_search_clustering(ts_cluster_data)
+
+```
+
+Best results based on metric
+
+```{r}
+
+analyze_clustering_results <- function(results) {
+    # Extract successful results
+    successful <- results$summary
+    
+    # Helper function to get top 3 for each metric (higher is better)
+    get_top3_higher <- function(df, metric) {
+        df_sorted <- df[order(df[[metric]], decreasing = TRUE), ]
+        head(df_sorted[, c("method", "distance", "centroid", "k", metric)], 3)
+    }
+    
+    # Helper function to get top 3 for each metric (lower is better)
+    get_top3_lower <- function(df, metric) {
+        df_sorted <- df[order(df[[metric]], decreasing = FALSE), ]
+        head(df_sorted[, c("method", "distance", "centroid", "k", metric)], 3)
+    }
+    
+    # Get top 3 for each metric
+    top_silhouette <- get_top3_higher(successful, "silhouette")
+    top_ch <- get_top3_higher(successful, "calinski_harabasz")
+    top_ari <- get_top3_higher(successful, "adjusted_rand_index")
+    top_accuracy <- get_top3_higher(successful, "accuracy")
+    top_db <- get_top3_lower(successful, "davies_bouldin")  # Lower is better for DB
+    
+    # For overall best, normalize each metric to 0-1 scale and combine
+    normalized <- successful
+    
+    # Function to min-max normalize
+    normalize <- function(x) (x - min(x, na.rm = TRUE)) / (diff(range(x, na.rm = TRUE)))
+    
+    # Normalize each metric
+    normalized$sil_norm <- normalize(normalized$silhouette)
+    normalized$ch_norm <- normalize(normalized$calinski_harabasz)
+    normalized$db_norm <- 1 - normalize(normalized$davies_bouldin)  # Invert DB since lower is better
+    normalized$ari_norm <- normalize(normalized$adjusted_rand_index)
+    normalized$acc_norm <- normalize(normalized$accuracy)
+    
+    # Calculate combined score (equal weights)
+    normalized$combined_score <- rowMeans(
+        cbind(normalized$sil_norm, 
+              normalized$ch_norm, 
+              normalized$db_norm,
+              normalized$ari_norm,
+              normalized$acc_norm), 
+        na.rm = TRUE
+    )
+    
+    # Get top 3 overall combinations
+    top_overall <- normalized[order(normalized$combined_score, decreasing = TRUE), ]
+    top_overall <- head(top_overall[, c("method", "distance", "centroid", "k", "combined_score")], 3)
+    
+    # Return all results
+    return(list(
+        top_silhouette = top_silhouette,
+        top_calinski_harabasz = top_ch,
+        top_davies_bouldin = top_db,
+        top_adjusted_rand = top_ari,
+        top_accuracy = top_accuracy,
+        top_overall = top_overall
+    ))
+}
+
+best_combinations <- analyze_clustering_results(results)
+
+# Print results
+print("Top 3 by Silhouette:")
+print(best_combinations$top_silhouette)
+
+print("\nTop 3 by Calinski-Harabasz:")
+print(best_combinations$top_calinski_harabasz)
+
+print("\nTop 3 by Davies-Bouldin:")
+print(best_combinations$top_davies_bouldin)
+
+print("\nTop 3 by Adjusted Rand Index:")
+print(best_combinations$top_adjusted_rand)
+
+print("\nTop 3 by Accuracy:")
+print(best_combinations$top_accuracy)
+
+print("\nTop 3 Overall:")
+print(best_combinations$top_overall)
+```
+
+Lets now investigate the top clustering a bit further
+
+```{r, fig.width=10, fig.height=7, dpi=300}
+registerDoSEQ()
+clustering <- tsclust(ts_cluster_data, type="p", distance="dtw", k=2, centroid="pam", args = list(dist.params = list(window.size = 20)))
+
+# Usage:
+plot_ts_clusters(ts_cluster_data, clustering, k = 2)
+
+```
+
+```{r, fig.width=7, fig.height=7, dpi=300}
+# Get the metadata including task labels
+metadata <- attr(ts_cluster_data, "metadata")
+
+# First part - confusion matrix and metrics
+conf_matrix <- table(
+  True = metadata$task,
+  Predicted = clustering@cluster
+)
+print("Confusion Matrix:")
+print(conf_matrix)
+
+# Calculate metrics
+metrics <- data.frame(
+  Task = c("ball", "math"),
+  Precision = numeric(2),
+  Recall = numeric(2),
+  F1_Score = numeric(2),
+  stringsAsFactors = FALSE
+)
+
+# Calculate metrics for each task
+for(i in 1:2) {
+  task <- metrics$Task[i]
+  TP <- conf_matrix[task, i]
+  FP <- sum(conf_matrix[, i]) - TP
+  FN <- sum(conf_matrix[task, ]) - TP
+  
+  metrics$Precision[i] <- TP / (TP + FP)
+  metrics$Recall[i] <- TP / (TP + FN)
+  metrics$F1_Score[i] <- 2 * (metrics$Precision[i] * metrics$Recall[i]) / 
+                         (metrics$Precision[i] + metrics$Recall[i])
+}
+
+# Print overall accuracy
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+cat("\nOverall Accuracy:", round(accuracy, 3))
+
+# Print rounded metrics
+print("\nPer-class metrics:")
+metrics_rounded <- metrics
+metrics_rounded[, 2:4] <- round(metrics_rounded[, 2:4], 3)
+print(metrics_rounded)
+
+
+# Convert confusion matrix to data frame for plotting
+conf_df <- as.data.frame(conf_matrix)
+names(conf_df) <- c("True", "Predicted", "Freq")
+
+ggplot(conf_df, aes(x = Predicted, y = True, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = Freq), color = "black", size = 5) +
+  scale_fill_gradient(low = "#FFFFFF", high = "#D73027") +
+  theme_minimal() +
+  labs(title = "Confusion Matrix Heatmap",
+       x = "Predicted Cluster",
+       y = "True Task") +
+  theme(text = element_text(size = 12),
+        axis.text = element_text(size = 10),
+        plot.title = element_text(size = 14, face = "bold"))
+
+```
+
+Add the clustering result to our main data frame
+
+```{r}
+# First, let's extract the cluster assignments
+cluster_assignments <- clustering@cluster
+
+# Create a mapping dataframe from the metadata we stored
+mapping_df <- attr(ts_cluster_data, "metadata") %>%
+  mutate(
+    shape_cluster = cluster_assignments,  # Changed name here
+    # Recreate the names to match with how we named the time series
+    ts_name = paste(session_label, round_number, task)
+  )
+
+# Now we can join this back to the original combined data
+combined_data <- bind_rows(
+  ball_task %>% mutate(task = "ball"),
+  math_task %>% mutate(task = "math")
+)
+
+# Add the cluster information
+combined_task_data <- combined_data %>%
+  left_join(
+    mapping_df %>% select(session_label, round_number, task, shape_cluster),  # Changed here
+    by = c("session_label", "round_number", "task")
+  )
+```
+
+# Feature based clustering
+Helper functions for RR interval data preparation
+
+```{r}
+# First, let's clean up the rr_intervals column by removing brackets and splitting into a list
+processed_data <- combined_task_data %>%
+  mutate(
+    rr_list = sapply(rr_intervalls, function(x) {
+      if (is.na(x)) return(list(numeric()))
+      if (x == "[]") return(list(numeric()))
+      
+      # Remove brackets and split by comma
+      nums <- gsub("\\[|\\]", "", x) %>%
+        strsplit(",") %>%
+        `[[`(1) %>%
+        trimws() %>%
+        as.numeric()
+      
+      list(nums/1000)  # Convert to seconds
+    })
+  )
+
+expanded_data <- processed_data %>%
+  unnest(rr_list) %>%
+  # Group by participant (session_label), task, and round
+  group_by(session_label, task, round_number) %>%
+  # Add initial beat at time 0
+  group_modify(~{
+    # Add a row with 0 at the start of each group
+    bind_rows(
+      tibble(rr_list = 0),
+      .x
+    )
+  }) %>%
+  # Calculate cumulative time for each beat
+  mutate(beat_time = lag(cumsum(rr_list), default = 0)) %>%
+  # Sort within each group
+  arrange(session_label, task, round_number, beat_time)
+
+expanded_data <- expanded_data %>%
+  filter(!is.na(label)) %>%
+  arrange(session_label, task, round_number, beat_time)
+
+# Create directory
+dir_name <- "beat_files"
+if (dir.exists(dir_name)) {
+  unlink(file.path(dir_name, "*"))
+} else {
+  dir.create(dir_name)
+}
+
+# Get unique combinations
+combinations <- expanded_data %>%
+  select(session_label, task, round_number) %>%
+  distinct()
+
+# Write files for each combination
+for(i in 1:nrow(combinations)) {
+  current <- combinations[i,]
+  
+  # Filter data for current combination
+  current_data <- expanded_data %>%
+    filter(
+      session_label == current$session_label,
+      task == current$task,
+      round_number == current$round_number
+    )
+  
+  # Create filename
+  filename <- file.path(dir_name, 
+                       sprintf("%s_%s_round%d.beats", 
+                              current$session_label,
+                              current$task,
+                              current$round_number))
+  
+  # Write only the beat times
+  write.table(current_data$beat_time,
+              file = filename,
+              row.names = FALSE,
+              col.names = FALSE,
+              quote = FALSE)
+}
+```
+
+Calculate all of the features we are interested in 
+
+```{r}
+calculate_rise_fall_features <- function(rr_intervals) {
+  # Calculate differences between successive intervals
+  diffs <- diff(rr_intervals)
+  
+  # Identify rising and falling segments
+  rises <- which(diffs > 0)
+  falls <- which(diffs < 0)
+  
+  # Calculate rise times (positive changes)
+  rise_times <- numeric()
+  current_rise <- c()
+  
+  for(i in 1:(length(diffs)-1)) {
+    if(diffs[i] > 0) {
+      current_rise <- c(current_rise, diffs[i])
+    } else if(length(current_rise) > 0) {
+      rise_times <- c(rise_times, sum(current_rise))
+      current_rise <- c()
+    }
+  }
+  
+  # Calculate fall times (negative changes)
+  fall_times <- numeric()
+  current_fall <- c()
+  
+  for(i in 1:(length(diffs)-1)) {
+    if(diffs[i] < 0) {
+      current_fall <- c(current_fall, abs(diffs[i]))
+    } else if(length(current_fall) > 0) {
+      fall_times <- c(fall_times, sum(current_fall))
+      current_fall <- c()
+    }
+  }
+  
+  # Calculate features
+  max_rise <- if(length(rise_times) > 0) max(rise_times) else NA
+  max_fall <- if(length(fall_times) > 0) max(fall_times) else NA
+  mean_rise <- if(length(rise_times) > 0) mean(rise_times) else NA
+  mean_fall <- if(length(fall_times) > 0) mean(fall_times) else NA
+  rise_rate <- length(rises) / length(diffs)
+  fall_rate <- length(falls) / length(diffs)
+  
+  return(list(
+    max_rise_time = max_rise,
+    max_fall_time = max_fall,
+    mean_rise_time = mean_rise,
+    mean_fall_time = mean_fall,
+    rise_rate = rise_rate,
+    fall_rate = fall_rate
+  ))
+}
+
+calculate_time_features <- function(rr_intervals) {
+  # Basic statistics
+  mean_rr <- mean(rr_intervals)
+  sdnn <- sd(rr_intervals)
+  rmssd <- sqrt(mean(diff(rr_intervals)^2))
+  
+  # Calculate NN50 and pNN50
+  # NN50 is the number of pairs of successive RR intervals that differ by more than 50ms
+  nn50 <- sum(abs(diff(rr_intervals)) > 0.05)  # 50ms = 0.05s
+  pnn50 <- (nn50 / length(diff(rr_intervals))) * 100
+  
+  # Calculate triangular index
+  hist_data <- hist(rr_intervals, breaks = "FD", plot = FALSE)
+  tri_index <- length(rr_intervals) / max(hist_data$counts)
+  
+  # Coefficient of variation
+  cv <- (sdnn / mean_rr) * 100
+  
+  return(list(
+    mean_rr = mean_rr,
+    sdnn = sdnn,
+    rmssd = rmssd,
+    nn50 = nn50,
+    pnn50 = pnn50,
+    tri_index = tri_index,
+    cv = cv
+  ))
+}
+
+
+
+# Modified nonlinear features calculation
+calculate_nonlinear_features <- function(rr_intervals) {
+  # Poincaré plot features
+  rr_n <- rr_intervals[-length(rr_intervals)]
+  rr_n1 <- rr_intervals[-1]
+  
+  # SD1 and SD2 calculation
+  sd1 <- sd(diff(rr_intervals) / sqrt(2))
+  sd2 <- sqrt(2 * var(rr_intervals) - sd1^2)
+  
+  # Custom implementation of Sample Entropy
+  calculate_sample_entropy <- function(series, m = 2, r = 0.2 * sd(series)) {
+    n <- length(series)
+    template_matches <- function(template, m) {
+      count <- 0
+      for(i in 1:(n-m+1)) {
+        if(all(abs(series[template:(template+m-1)] - series[i:(i+m-1)]) < r)) count <- count + 1
+      }
+      return(count - 1)  # Subtract self-match
+    }
+    
+    A <- sum(sapply(1:(n-m), function(i) template_matches(i, m+1)))
+    B <- sum(sapply(1:(n-m), function(i) template_matches(i, m)))
+    
+    if(B == 0) return(NA)
+    -log(A/B)
+  }
+  
+  # Calculate sample entropy
+  sample_ent <- tryCatch({
+    calculate_sample_entropy(rr_intervals)
+  }, error = function(e) NA)
+  
+  return(list(
+    sd1 = sd1,
+    sd2 = sd2,
+    sd1_sd2_ratio = sd1/sd2,
+    sample_entropy = sample_ent
+  ))
+}
+
+# Helper function for DFA
+dfa <- function(x, win_min = 4, win_max = NULL) {
+  if(is.null(win_max)) win_max <- length(x)/4
+  
+  windows <- unique(floor(exp(seq(log(win_min), log(win_max), length.out = 20))))
+  f_n <- numeric(length(windows))
+  
+  for(i in seq_along(windows)) {
+    win <- windows[i]
+    segments <- floor(length(x)/win)
+    if(segments < 1) break
+    
+    y <- cumsum(x - mean(x))
+    f_n[i] <- sqrt(mean(unlist(lapply(1:segments, function(j) {
+      idx <- ((j-1)*win + 1):(j*win)
+      res <- lm(y[idx] ~ idx)
+      mean(res$residuals^2)
+    }))))
+  }
+  
+  fit <- lm(log(f_n) ~ log(windows))
+  list(alpha = coef(fit)[2], r.squared = summary(fit)$r.squared)
+}
+
+create_feature_matrix <- function(expanded_data) {
+  grouped_data %>%
+    group_by(session_label, task, round_number) %>%
+    summarise(
+      time_features = list(calculate_time_features(rr_list)),
+      freq_features = list(freq_features(hrv.data)),
+      nonlinear_features = list(calculate_nonlinear_features(rr_list)),
+      rise_fall_features = list(calculate_rise_fall_features(rr_list))  # Add this line
+    ) %>%
+    unnest_wider(c(time_features, freq_features, nonlinear_features, rise_fall_features))
+}
+
+
+
+extract_freq_features <- function(hrv.data) {
+  # Get the frequency analysis data
+  fa <- hrv.data$FreqAnalysis[[1]]
+  
+  # Calculate mean power in each band
+  lf_power <- mean(fa$LF, na.rm = TRUE)
+  hf_power <- mean(fa$HF, na.rm = TRUE)
+  vlf_power <- mean(fa$VLF, na.rm = TRUE)
+  ulf_power <- mean(fa$ULF, na.rm = TRUE)
+  
+  # Calculate mean LF/HF ratio
+  lf_hf_ratio <- mean(fa$LFHF, na.rm = TRUE)
+  
+  # Calculate total power (mean of all bands)
+  total_power <- ulf_power + vlf_power + lf_power + hf_power
+  
+  # Calculate additional frequency domain metrics
+  peak_lf <- max(fa$LF, na.rm = TRUE)
+  peak_hf <- max(fa$HF, na.rm = TRUE)
+  
+  # Standard deviation of power in each band
+  sd_lf <- sd(fa$LF, na.rm = TRUE)
+  sd_hf <- sd(fa$HF, na.rm = TRUE)
+  
+  list(
+    lf_power = lf_power,
+    hf_power = hf_power,
+    vlf_power = vlf_power,
+    ulf_power = ulf_power,
+    lf_hf_ratio = lf_hf_ratio,
+    total_power = total_power,
+    peak_lf = peak_lf,
+    peak_hf = peak_hf,
+    sd_lf = sd_lf,
+    sd_hf = sd_hf
+  )
+}
+
+
+# First, let's organize our data processing by group
+unique_combinations <- expanded_data %>%
+  select(session_label, task, round_number) %>%
+  distinct()
+
+# Create empty list to store results
+all_features <- list()
+
+for(i in 1:nrow(unique_combinations)) {
+  
+  current <- unique_combinations[i,]
+  
+  # Get current group's data
+  current_data <- expanded_data %>%
+    filter(
+      session_label == current$session_label,
+      task == current$task,
+      round_number == current$round_number
+    )
+  
+  # Get RR intervals for this group
+  rr_intervals <- diff(current_data$beat_time)
+  
+  # Calculate time domain features
+  time_features <- calculate_time_features(rr_intervals)
+  
+  # Load and process RHRV data for this group
+  file_name <- sprintf("beat_files/%s_%s_round%d.beats", 
+                      current$session_label,
+                      current$task,
+                      current$round_number)
+  
+  hrv.data <- CreateHRVData()
+  hrv.data <- LoadBeatAscii(hrv.data, file_name)
+  hrv.data <- BuildNIHR(hrv.data)
+  hrv.data <- FilterNIHR(hrv.data)
+  hrv.data <- InterpolateNIHR(hrv.data, freqhr = 4)
+  hrv.data <- CreateFreqAnalysis(hrv.data)
+  hrv.data <- CalculatePowerBand(hrv.data, 
+                                indexFreqAnalysis = 1,
+                                size = 8, 
+                                shift = 4, 
+                                type = "fourier",
+                                ULFmin = 0, ULFmax = 0.03, 
+                                VLFmin = 0.03, VLFmax = 0.05,
+                                LFmin = 0.05, LFmax = 0.15, 
+                                HFmin = 0.15, HFmax = 0.4)
+  
+  # Get frequency features
+  freq_features <- extract_freq_features(hrv.data)
+  
+  # Calculate non-linear features
+  nonlinear_features <- calculate_nonlinear_features(rr_intervals)
+  
+  r_and_f_features <- calculate_rise_fall_features(rr_intervals)
+  
+  # Combine all features with metadata
+  all_features[[i]] <- c(
+    list(
+      session_label = current$session_label,
+      task = current$task,
+      round_number = current$round_number
+    ),
+    time_features,
+    freq_features,
+    nonlinear_features,
+    r_and_f_features
+  )
+}
+
+# Convert list of features to dataframe
+features_df <- bind_rows(all_features)
+
+
+```
+
+# Grid search
+
+```{r}
+exclude_cols <- c(1:3, which(names(features_df) %in% c("sample_entropy", "vlf_power")))
+
+feature_set <- list(
+  "all" = names(features_df)[-exclude_cols],  # all features except metadata and sample_entropy
+  "time_domain" = c("mean_rr", "sdnn", "rmssd", "nn50", "pnn50", "tri_index", "cv",
+                    "max_rise_time", "max_fall_time", "mean_rise_time", "mean_fall_time", "rise_rate", "fall_rate"),
+                    
+  "freq_domain" = c("lf_power", "hf_power", "lf_hf_ratio", "total_power", "peak_lf", "peak_hf", "sd_lf", "sd_hf"),
+  
+  "nonlinear" = c("sd1", "sd2", "sd1_sd2_ratio"),
+
+  # Focused feature combinations
+  "variability_focused" = c("sdnn", "rmssd", "sd1", "sd2", "tri_index", "cv", "max_rise_time", "max_fall_time"),
+  
+  "ratio_based" = c("lf_hf_ratio", "sd1_sd2_ratio", "pnn50", "cv"),
+  
+  "power_metrics" = c("lf_power", "hf_power", "total_power", "peak_lf", "peak_hf"),
+  
+  "temporal_and_spectral" = c("sdnn", "rmssd", "lf_power", "hf_power", "lf_hf_ratio", "mean_rise_time", "mean_fall_time"),
+  
+  "short_term_variability" = c("rmssd", "pnn50", "hf_power", "sd1", "rise_rate", "fall_rate"),
+  
+  "long_term_variability" = c("sdnn", "lf_power", "sd2", "tri_index"),
+  
+  "distribution_focused" = c("tri_index", "cv", "sd_lf", "sd_hf", "sdnn"),
+  
+  "minimal_complete" = c("rmssd", "lf_hf_ratio", "sd1_sd2_ratio", "total_power"),
+
+  # Physiological interpretations
+  "parasympathetic_focused" = c("rmssd", "pnn50", "hf_power", "sd1", "peak_hf", "sd_hf"),
+  
+  "sympathetic_focused" = c("lf_power", "sdnn", "sd2", "peak_lf", "sd_lf"),
+  
+  "peak_and_spread" = c("peak_lf", "peak_hf", "sd_lf", "sd_hf", "tri_index"),
+  
+  "geometric_measures" = c("tri_index", "sd1", "sd2", "sd1_sd2_ratio"),
+  
+  "normalized_metrics" = c("cv", "pnn50", "lf_hf_ratio", "sd1_sd2_ratio"),
+  
+  "power_and_geometry" = c("total_power", "lf_hf_ratio", "sd1", "sd2", "tri_index"),
+  
+  "composite_variability" = c("sdnn", "rmssd", "tri_index", "total_power", "sd1_sd2_ratio"),
+  
+  "frequency_detailed" = c("lf_power", "hf_power", "peak_lf", "peak_hf", "sd_lf", "sd_hf", "lf_hf_ratio"),
+  
+  "time_detailed" = c("mean_rr", "sdnn", "rmssd", "nn50", "pnn50", "tri_index", "cv"),
+  
+  "robust_metrics" = c("tri_index", "total_power", "sd2", "cv", "mean_rr"),
+  
+  "statistical_moments" = c("mean_rr", "sdnn", "cv", "tri_index"),
+  
+  "autonomic_balance" = c("lf_hf_ratio", "sd1_sd2_ratio", "total_power", "rmssd"),
+
+  # Dynamic response feature sets
+  "dynamic_response" = c("max_rise_time", "max_fall_time", "mean_rise_time", "mean_fall_time", "rise_rate", "fall_rate", "rmssd", "sd1"),
+  
+  "rate_change_patterns" = c("rise_rate", "fall_rate", "lf_hf_ratio", "sd1_sd2_ratio", "mean_rise_time", "mean_fall_time"),
+  
+  "acceleration_focused" = c("max_rise_time", "max_fall_time", "peak_lf", "peak_hf", "sd1", "rmssd"),
+  
+  "temporal_dynamics" = c("mean_rise_time", "mean_fall_time", "sdnn", "tri_index", "total_power", "rise_rate", "fall_rate"),
+  
+  "change_magnitude" = c("max_rise_time", "max_fall_time", "peak_lf", "peak_hf", "sdnn", "total_power"),
+  
+  "response_symmetry" = c("rise_rate", "fall_rate", "mean_rise_time", "mean_fall_time", "lf_hf_ratio", "sd1_sd2_ratio"),
+  
+  "adaptation_metrics" = c("rise_rate", "fall_rate", "rmssd", "sd1", "hf_power", "mean_rise_time", "mean_fall_time")
+)
+
+
+feature_set <- c(feature_set, list(
+    # Mental stress indicators - might help identify math-induced stress
+    "stress_response" = c("lf_hf_ratio", "mean_rr", "sdnn", "max_rise_time", "rise_rate"),
+    
+    # Physical engagement patterns - for ball catching activity
+    "physical_reactivity" = c("max_fall_time", "sd1", "peak_hf", "mean_rise_time", "rise_rate"),
+    
+    # Attention and focus metrics
+    "cognitive_load" = c("mean_rr", "sd2", "lf_power", "rise_rate", "fall_rate", "pnn50"),
+    
+    # Emotional state indicators
+    "emotional_arousal" = c("sd1", "hf_power", "max_rise_time", "mean_fall_time", "lf_hf_ratio"),
+    
+    # Quick response patterns - relevant for ball catching
+    "quick_adaptation" = c("rmssd", "sd1", "rise_rate", "fall_rate", "mean_rise_time"),
+    
+    # Anxiety indicators - might be elevated during math
+    "anxiety_markers" = c("mean_rr", "sd1", "hf_power", "max_rise_time", "rise_rate"),
+    
+    # Flow state indicators - might be present during successful ball catching
+    "flow_state" = c("sdnn", "total_power", "mean_fall_time", "fall_rate", "sd1_sd2_ratio"),
+    
+    # Mental effort without stress
+    "focused_work" = c("mean_rr", "sd2", "lf_power", "mean_rise_time", "pnn50"),
+    
+    # Enjoyment indicators
+    "positive_engagement" = c("sd1", "hf_power", "mean_fall_time", "fall_rate", "total_power"),
+    
+    # Task switching ability
+    "adaptation_capacity" = c("sd1_sd2_ratio", "max_rise_time", "max_fall_time", "rmssd", "tri_index"),
+    
+    # Anticipatory response - relevant for ball catching
+    "anticipatory" = c("rise_rate", "sd1", "mean_rise_time", "hf_power", "peak_hf"),
+    
+    # Mental processing load
+    "processing_load" = c("mean_rr", "lf_power", "max_rise_time", "sd2", "pnn50"),
+    
+    # Performance pressure indicators
+    "performance_pressure" = c("lf_hf_ratio", "max_rise_time", "sdnn", "rise_rate", "mean_rr"),
+    
+    # Relaxed engagement state
+    "relaxed_focus" = c("sd1", "hf_power", "mean_fall_time", "total_power", "pnn50"),
+    
+    # Recovery patterns between events
+    "inter_event_recovery" = c("mean_fall_time", "fall_rate", "sd1", "hf_power", "rmssd"),
+    
+    # Readiness for action
+    "action_readiness" = c("rise_rate", "max_rise_time", "sd1", "mean_rr", "total_power"),
+    
+    # Sustained attention
+    "sustained_attention" = c("sd2", "lf_power", "mean_rr", "pnn50", "tri_index"),
+    
+    # Challenge response
+    "challenge_response" = c("max_rise_time", "lf_hf_ratio", "sdnn", "rise_rate", "total_power")
+))
+
+scaling_methods <- list(
+  "zscore" = function(x) scale(x),
+  "minmax" = function(x) (x - min(x)) / (max(x) - min(x)),
+  "robust" = function(x) (x - median(x)) / IQR(x)
+)
+
+# Extended clustering methods
+clustering_methods <- list(
+  "kmeans" = function(data, k) {
+    list(cluster = kmeans(data, k)$cluster)
+  },
+  "hclust_complete" = function(data, k) {
+    list(cluster = cutree(hclust(dist(data), method = "complete"), k))
+  },
+  "hclust_average" = function(data, k) {
+    list(cluster = cutree(hclust(dist(data), method = "average"), k))
+  },
+  "pam" = function(data, k) {
+    list(cluster = pam(data, k)$clustering)
+  },
+  # "gmm" = function(data, k) {
+  #   list(cluster = Mclust(data, G = k)$classification)
+  # }
+  "dbscan" = function(data, k) {
+    # For DBSCAN, we'll try different eps values and select the one that gives
+    # closest to k clusters
+    eps_candidates <- seq(0.1, 2, by = 0.1) * mean(dist(data))
+    best_eps <- NULL
+    best_clusters <- NULL
+    best_diff <- Inf
+
+    for(eps in eps_candidates) {
+      db <- dbscan(data, eps = eps, minPts = 4)
+      if(length(unique(db$cluster)) - 1 > 0) {  # -1 because DBSCAN has noise cluster
+        diff <- abs(length(unique(db$cluster)) - 1 - k)
+        if(diff < best_diff) {
+          best_diff <- diff
+          best_eps <- eps
+          best_clusters <- db$cluster
+        }
+      }
+    }
+    list(cluster = if(!is.null(best_clusters)) best_clusters else rep(1, nrow(data)))
+  }
+)
+
+k_values <- 2:5
+
+
+
+
+# Create all combinations
+combinations <- expand.grid(
+  feature_set = names(feature_set),
+  scaling = names(scaling_methods),
+  clustering = names(clustering_methods),
+  k = k_values,
+  stringsAsFactors = FALSE
+)
+
+
+```
+
+
+
+```{r}
+# Register doFuture as backend
+registerDoFuture()
+plan(multisession, workers = parallel::detectCores())
+
+# Set chunk size
+chunk_size <- 1000  # Adjust this based on your needs
+n_combinations <- nrow(combinations)
+chunk_indices <- split(1:n_combinations, 
+                       ceiling(seq_along(1:n_combinations) / chunk_size))
+
+options(future.globals.maxSize = 10 * 1024^3)
+
+# Set up progress reporting
+handlers("progress")
+
+# Set a reproducible random seed
+set.seed(12345)
+
+# Run the parallel processing
+with_progress({
+    p <- progressor(along = chunk_indices)
+    
+    results <- foreach(chunk_idx = chunk_indices,
+                       .combine = rbind,
+                       .packages = c("cluster", "kohonen", "mclust", "dbscan"),
+                       .errorhandling = "pass") %dorng% {
+        
+        # Process all combinations in the current chunk
+        chunk_results <- lapply(chunk_idx, function(i) {
+            current <- combinations[i, ]
+            features_to_use <- feature_set[[current$feature_set]]
+            
+            tryCatch({
+                # Prepare data
+                current_data <- features_df[features_to_use]
+                scaled_data <- as.data.frame(lapply(current_data, 
+                                                    scaling_methods[[current$scaling]]))
+                
+                # Apply clustering
+                clustering_result <- clustering_methods[[current$clustering]](scaled_data, 
+                                                                              current$k)
+                
+                # Calculate metrics
+                sil <- silhouette(clustering_result$cluster, dist(scaled_data))
+                sil_width <- mean(sil[, 3])
+                
+                # Calculate smallest cluster size
+                cluster_sizes <- table(clustering_result$cluster)
+                min_cluster_size <- min(cluster_sizes)
+                
+                # Calculate accuracy against ground truth
+                cluster_task_table <- table(clustering_result$cluster, features_df$task)
+                accuracy <- max(sum(diag(cluster_task_table)), 
+                                sum(diag(cluster_task_table[, ncol(cluster_task_table):1]))) / 
+                            sum(cluster_task_table)
+                
+                data.frame(
+                    feature_set = current$feature_set,
+                    n_features = length(features_to_use),
+                    scaling = current$scaling,
+                    clustering = current$clustering,
+                    k = current$k,
+                    silhouette = sil_width,
+                    accuracy = accuracy,
+                    min_cluster_size = min_cluster_size,
+                    error = FALSE,
+                    error_message = NA_character_,
+                    stringsAsFactors = FALSE
+                )
+                
+            }, error = function(e) {
+                data.frame(
+                    feature_set = current$feature_set,
+                    n_features = length(features_to_use),
+                    scaling = current$scaling,
+                    clustering = current$clustering,
+                    k = current$k,
+                    silhouette = NA_real_,
+                    accuracy = NA_real_,
+                    min_cluster_size = NA_real_,
+                    error = TRUE,
+                    error_message = conditionMessage(e),
+                    stringsAsFactors = FALSE
+                )
+            })
+        })
+        
+        # Update progress
+        p()
+        
+        # Combine results from this chunk
+        do.call(rbind, chunk_results)
+    }
+})
+```
+
+# Look at best result
+
+```{r, fig.width=5, fig.height=4, dpi=300}
+# Get the specific feature set
+# parasympathetic_focused
+features_to_use <- feature_set[['parasympathetic_focused']]
+
+# Prepare data
+current_data <- features_df[features_to_use]
+
+# Apply minmax scaling
+scaled_data <- as.data.frame(lapply(current_data, function(x) (x - min(x)) / (max(x) - min(x))))
+
+# Perform k-means clustering
+set.seed(12345)  # for reproducibility
+# km_result <- kmeans(scaled_data, centers = 2)
+km_result <- pam(scaled_data, 2)
+
+# Add cluster information to scaled_data - THIS WAS MISSING
+scaled_data$Cluster <- factor(km_result$cluster)
+
+# PCA visualization
+pca_result <- prcomp(scaled_data[, -ncol(scaled_data)], scale. = FALSE)  # exclude Cluster column
+pca_data <- as.data.frame(pca_result$x[, 1:2])
+
+# Create PCA plot
+ggplot(pca_data, aes(x = PC1, y = PC2, color = factor(km_result$cluster))) +
+  geom_point(alpha = 0.6) +
+  theme_minimal() +
+  labs(title = "PCA visualization of clusters",
+       color = "Cluster") +
+  scale_color_brewer(palette = "Set1")
+
+# t-SNE visualizations for different perplexities
+perplexity_values <- seq(2, 40, by = 2)
+perplexity_values <- 14
+# Loop through perplexity values
+for(perp in perplexity_values) {
+  if(perp >= nrow(scaled_data)) {
+    cat(sprintf("Skipping perplexity %d as it's too large for dataset size\n", perp))
+    next
+  }
+  
+  set.seed(12345)
+  tryCatch({
+    tsne_result <- Rtsne(scaled_data[, -ncol(scaled_data)], perplexity = perp)  # exclude Cluster column
+    tsne_data <- as.data.frame(tsne_result$Y)
+    
+    print(
+      ggplot(tsne_data, aes(x = V1, y = V2, color = factor(km_result$cluster))) +
+        geom_point(alpha = 0.6) +
+        theme_minimal() +
+        labs(title = sprintf("t-SNE visualization ", perp),# (perplexity = %d)
+             x = "t-SNE1", y = "t-SNE2",
+             color = "Cluster") +
+        scale_color_brewer(palette = "Set1")
+    )
+  }, error = function(e) {
+    cat(sprintf("Error with perplexity %d: %s\n", perp, e$message))
+  })
+}
+
+# Create pairs plot
+ggpairs(scaled_data,
+        columns = 1:4,  # only the feature columns
+        aes(color = Cluster),
+        upper = list(continuous = "points"),
+        lower = list(continuous = "points"),
+        diag = list(continuous = "densityDiag"),
+        progress = FALSE) +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1") +
+  scale_fill_brewer(palette = "Set1")
+
+# Print statistics
+cat("\nCluster centers (scaled space):\n")
+print(km_result$centers)
+
+cat("\nCluster sizes:\n")
+print(table(km_result$cluster))
+
+
+sil <- silhouette(km_result$cluster, dist(scaled_data[, -ncol(scaled_data)]))  # exclude Cluster column
+cat("\nSilhouette width:", mean(sil[,3]), "\n")
+
+if(exists("features_df$task")) {
+  cluster_task_table <- table(km_result$cluster, features_df$task)
+  accuracy <- max(sum(diag(cluster_task_table)), 
+                 sum(diag(cluster_task_table[, ncol(cluster_task_table):1]))) / 
+              sum(cluster_task_table)
+  cat("\nAccuracy against task labels:", accuracy, "\n")
+}
+```
+```{r}
+# Add to main df
+
+# Add clusters to features_df
+  features_df$feature_cluster <- km_result$cluster
+  
+  # Merge clusters back to original data
+  combined_task_data <- combined_task_data %>%
+    left_join(
+      features_df %>% 
+        select(session_label, task, round_number, feature_cluster),
+      by = c("session_label", "task", "round_number")
+    )
+```
+
+# Hypotheses Testing
+
+```{r}
+summarized_data <- combined_task_data %>%
+  group_by(session_label, task, round_number) %>%
+  summarize(
+    avg_hr = mean(heart_rate),
+    shape_cluster = first(shape_cluster),
+    feature_cluster = first(feature_cluster)
+  )
+```
+
+```{r}
+emotion_response <- read_csv(here("data/emotion_responses_lab_run_18_12.csv"))
+
+emotion_response <- emotion_response %>%
+  mutate(session_label = paste(session_code, label, sep = "_")) 
+```
+
+```{r}
+control_variables <- read_csv("data/control_variables_lab_run_18_12.csv")
+
+control_variables <- control_variables %>%
+  mutate(session_label = paste(session, label, sep = "_")) 
+
+# First, prepare the control variables with proper types
+control_variables <- control_variables %>%
+  mutate(
+    # Convert categorical variables to factors with explicit levels
+    gender = factor(gender),
+    age = factor(age),
+    consumed_substances = factor(consumed_substances),
+    heavy_meal = factor(heavy_meal),
+    exercise = factor(exercise),
+    
+    # Scale continuous enjoyment variables (1-9 scales)
+    # Scaling helps with model interpretation and convergence
+    math_enjoyment_scaled = scale(math_enjoyment),
+    ball_task_enjoyment_scaled = scale(ball_task_enjoyment)
+  )
+
+# Join the data
+model_data <- summarized_data %>%
+  left_join(control_variables, 
+            by = "session_label")
+
+
+data.frame(
+  gender_levels = nlevels(factor(model_data$gender)),
+  age_levels = nlevels(factor(model_data$age)),
+  substances_levels = nlevels(factor(model_data$consumed_substances)),
+  meal_levels = nlevels(factor(model_data$heavy_meal)),
+  exercise_levels = nlevels(factor(model_data$exercise))
+) %>% print()
+
+# Also check the actual levels
+cat("\nActual levels:\n")
+cat("Gender:", levels(factor(model_data$gender)), "\n")
+cat("Age:", levels(factor(model_data$age)), "\n")
+cat("Substances:", levels(factor(model_data$consumed_substances)), "\n")
+cat("Heavy meal:", levels(factor(model_data$heavy_meal)), "\n")
+cat("Exercise:", levels(factor(model_data$exercise)), "\n")
+```
+
+
+# H01
+
+```{r}
+# For shape clusters
+model_h1_shape <- multinom(shape_cluster ~ 
+                          task + 
+                          gender +
+                          age +
+                          consumed_substances +
+                          exercise +
+                          math_enjoyment_scaled +
+                          ball_task_enjoyment_scaled,
+                          data = model_data)
+summary(model_h1_shape)
+
+
+
+# For feature clusters
+model_h1_feature <- multinom(feature_cluster ~ 
+                          task + 
+                          gender +
+                          age +
+                          consumed_substances +
+                          exercise +
+                          math_enjoyment_scaled +
+                          ball_task_enjoyment_scaled,
+                          data = model_data)
+summary(model_h1_feature)
+
+Anova(model_h1_shape, type = "III")
+Anova(model_h1_feature, type = "III")
+```
+
+
+# H02
+```{r}
+model_data$shape_cluster_binary <- model_data$shape_cluster - 1
+model_data$feature_cluster_binary <- model_data$feature_cluster - 1
+
+math_data <- subset(model_data, task == "math")
+ball_data <- subset(model_data, task == "ball")
+
+
+model_h02_ball_bayes_shape <- brm(
+  shape_cluster_binary ~ (1 | session_label) +
+    gender + age  + 
+    exercise + ball_task_enjoyment_scaled,
+  family = bernoulli(),
+  data = ball_data,
+  control = list(adapt_delta = 0.9),
+  cores = 16,  # For faster computation
+  iter = 10000 # Increase iterations for stability
+)
+
+model_h02_math_bayes_shape <- brm(
+  shape_cluster_binary ~ (1 | session_label) +
+    gender + age  + 
+    exercise + ball_task_enjoyment_scaled,
+  family = bernoulli(),
+  data = math_data,
+  control = list(adapt_delta = 0.9),
+  cores = 16,  # For faster computation
+  iter = 10000 # Increase iterations for stability
+)
+
+model_h02_ball_bayes_feature <- brm(
+  feature_cluster_binary ~ (1 | session_label) +
+    gender + age  + 
+    exercise + ball_task_enjoyment_scaled,
+  family = bernoulli(),
+  data = ball_data,
+  cores = 16,  # For faster computation
+  iter = 10000
+)
+
+model_h02_math_bayes_feature <- brm(
+  feature_cluster_binary ~ (1 | session_label) +
+    gender + age  + 
+    exercise + ball_task_enjoyment_scaled,
+  family = bernoulli(),
+  data = math_data,
+  cores = 16,  # For faster computation
+  iter = 10000 # Increase iterations for stability
+)
+
+summary(model_h02_ball_bayes_shape)
+summary(model_h02_math_bayes_shape)
+summary(model_h02_ball_bayes_feature)
+summary(model_h02_math_bayes_feature)
+```
+
+
+# H03
+
+```{r}
+emotion_response$round_number <- emotion_response$round
+merged_data <- merge(model_data, emotion_response, 
+                    by=c("session_label", "task", "round_number"))
+```
+
+
+```{r}
+# Create correlation matrix for emotional variables
+emotion_vars <- merged_data[, c("anger", "disgust", "fear", "anxiety", 
+                               "sadness", "happiness", "desire", "relaxation",
+                               "excitement_sam", "happiness_sam")]
+cor_matrix <- cor(emotion_vars)
+
+# Visualize correlation matrix
+corrplot(cor_matrix, method = "color", type = "upper", 
+         addCoef.col = "black", number.cex = 0.7)
+
+# Calculate VIF for emotional variables in basic model
+model_vif <- lm(scale(anger) ~ ., data = emotion_vars)
+vif_values <- vif(model_vif)
+print(vif_values)
+
+# If needed, we can use PCA to reduce dimensionality
+emotion_pca <- prcomp(emotion_vars, scale. = TRUE)
+summary(emotion_pca)
+
+# Extract principal components explaining >80% of variance
+pcs <- predict(emotion_pca)[, 1:3]  # Adjust number based on results
+merged_data$emotion_pc1 <- pcs[,1]
+merged_data$emotion_pc2 <- pcs[,2]
+merged_data$emotion_pc3 <- pcs[,3]
+```
+
+
+
+```{r}
+# Ensure clusters are factors
+merged_data$shape_cluster <- as.factor(merged_data$shape_cluster)
+merged_data$feature_cluster <- as.factor(merged_data$feature_cluster)
+
+# 1. Shape cluster model with emotional variables
+shape_model1_mixed <- glmer(shape_cluster ~ 
+    scale(anger) + scale(disgust) + scale(fear) + scale(anxiety) + 
+    scale(sadness) + scale(happiness) + scale(desire) + scale(relaxation) +
+    gender + age + exercise + 
+    math_enjoyment_scaled + ball_task_enjoyment_scaled +
+    scale(round_number) + task +
+    (1|session_label),
+    data = merged_data,
+    family = binomial,
+    control = glmerControl(optimizer = "bobyqa",
+                          optCtrl = list(maxfun = 100000)))
+
+# 2. Shape cluster model with SAM variables
+shape_model2_mixed <- glmer(shape_cluster ~ 
+    scale(excitement_sam) + scale(happiness_sam) +
+    gender + age + exercise + 
+    math_enjoyment_scaled + ball_task_enjoyment_scaled +
+    scale(round_number) + task +
+    (1|session_label),
+    data = merged_data,
+    family = binomial,
+    control = glmerControl(optimizer = "bobyqa",
+                          optCtrl = list(maxfun = 100000)))
+
+# 3. Feature cluster model with emotional variables
+feature_model1_mixed <- glmer(feature_cluster ~ 
+    scale(anger) + scale(disgust) + scale(fear) + scale(anxiety) + 
+    scale(sadness) + scale(happiness) + scale(desire) + scale(relaxation) +
+    gender + age + exercise + 
+    math_enjoyment_scaled + ball_task_enjoyment_scaled +
+    scale(round_number) + task +
+    (1|session_label),
+    data = merged_data,
+    family = binomial,
+    control = glmerControl(optimizer = "bobyqa",
+                          optCtrl = list(maxfun = 100000)))
+
+# 4. Feature cluster model with SAM variables
+feature_model2_mixed <- glmer(feature_cluster ~ 
+    scale(excitement_sam) + scale(happiness_sam) +
+    gender + age + exercise + 
+    math_enjoyment_scaled + ball_task_enjoyment_scaled +
+    scale(round_number) + task +
+    (1|session_label),
+    data = merged_data,
+    family = binomial,
+    control = glmerControl(optimizer = "bobyqa",
+                          optCtrl = list(maxfun = 100000)))
+
+
+
+
+summary(glmer(task == "math" ~ 
+    scale(excitement_sam) + scale(happiness_sam) +
+    gender + age + exercise + 
+    math_enjoyment_scaled + ball_task_enjoyment_scaled +
+    scale(round_number) +
+    (1|session_label),
+    data = merged_data,
+    family = binomial,
+    control = glmerControl(optimizer = "bobyqa",
+                          optCtrl = list(maxfun = 100000))))
+
+
+summary(glmer(task == "math" ~ 
+    scale(anger) + scale(disgust) + scale(fear) + scale(anxiety) + 
+    scale(sadness) + scale(happiness) + scale(desire) + scale(relaxation) +
+    gender + age + exercise + 
+    math_enjoyment_scaled + ball_task_enjoyment_scaled +
+    scale(round_number) + 
+    (1|session_label),
+    data = merged_data,
+    family = binomial,
+    control = glmerControl(optimizer = "bobyqa",
+                          optCtrl = list(maxfun = 100000))))
+
+# To get summaries:
+summary(shape_model1_mixed)
+summary(shape_model2_mixed)
+summary(feature_model1_mixed)
+summary(feature_model2_mixed)
+
+
+```
+
+
+```{r}
+# Model for shape clusters
+multinom(shape_cluster ~ anger + disgust + fear + anxiety + 
+                          sadness + happiness + desire + relaxation + 
+                          round_number + session_label, data = merged_data)
+
+
+multinom(shape_cluster ~ excitement_sam + happiness_sam + 
+                          round_number + session_label, data = merged_data)
+
+
+
+
+# Model for feature clusters
+summary(multinom(feature_cluster ~ anger + disgust + fear + anxiety + 
+                            sadness + happiness + desire + relaxation + 
+                          round_number + session_label, data = merged_data))
+
+
+
+multinom(feature_cluster ~ excitement_sam + happiness_sam + 
+                          round_number + session_label, data = merged_data)
+
+
+# Logistic regression (task as dependent variable)
+glm(task == "math" ~ anger + disgust + fear + anxiety + 
+                     sadness + happiness + desire + relaxation + 
+                          round_number + session_label,
+                     family = binomial, data = merged_data)
+
+
+glm(task == "math" ~  excitement_sam + happiness_sam + 
+                          round_number + session_label, 
+                     family = binomial, data = merged_data)
+```
+
+#H04
+
+```{r}
+# Fit the model
+model <- lmer(avg_hr ~ round_number * task + 
+              gender + age + exercise +
+              math_enjoyment_scaled + ball_task_enjoyment_scaled + 
+              (round_number | participant_id.x), 
+              data = merged_data)
+
+# Get summary with p-values
+summary(model)
+
+# For null model comparison
+null_model <- lmer(avg_hr ~ round_number + task + 
+                   gender + age + exercise +
+                   math_enjoyment_scaled + ball_task_enjoyment_scaled + 
+                   (round_number | participant_id.x), 
+                   data = merged_data)
+
+# Compare models
+anova(null_model, model)
+
+
+```
+
+
+```{r}
+glm(avg_hr ~ round_number, data = summarized_data)
+
+lmer(avg_hr ~ round_number * task +
+     (1 | session_label), 
+     data = summarized_data)
+```
+
+
+
+
+
+
+
